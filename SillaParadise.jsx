@@ -1553,9 +1553,14 @@ export function SunanEditor({ embedded = false }) {
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 12, fontWeight: 600 }}>{i.n}</div>
+                {/* حقائق منفصلة بفواصل مُتباعدة — النقطة الملاصقة لرقم تُقرأ جزءًا منه */}
                 <div style={S.aB}>
-                  {i.b} · {ar(i.g)} جوهرة · {i.type === "cycle" ? `عدّاد إلى ${ar(i.max)}` : "نعم/لا"}
-                  {i.q ? " · سريعة" : ""}
+                  <span>{i.b}</span>
+                  <span style={S.aBSep}>·</span>
+                  <span>{ar(i.g)} جوهرة</span>
+                  <span style={S.aBSep}>·</span>
+                  <span>{i.type === "cycle" ? `عدّاد إلى ${ar(i.max)}` : "نعم/لا"}</span>
+                  {i.q && <><span style={S.aBSep}>·</span><span>سريعة</span></>}
                 </div>
               </div>
               <span style={S.edPen}>✎</span>
@@ -2001,7 +2006,9 @@ const S = {
           background: "var(--sp-surf2)", border: "1px solid var(--sp-line)", marginBottom: 6,
           cursor: "grab", touchAction: "none", userSelect: "none" },
   aGrip: { color: "var(--sp-mut)", fontSize: 15, flexShrink: 0, letterSpacing: -2 },
-  aB: { fontSize: 9.5, color: "var(--sp-mut)", marginTop: 2 },
+  aB: { fontSize: 9.5, color: "var(--sp-mut)", marginTop: 3,
+        display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0 5px" },
+  aBSep: { opacity: .45 },
   ghost: { position: "fixed", zIndex: 90, transform: "translate(-50%,-50%) rotate(-2deg)",
            pointerEvents: "none", display: "flex", alignItems: "center", gap: 7,
            background: "var(--sp-surf)", borderWidth: 2, borderStyle: "solid", borderRadius: 12,
