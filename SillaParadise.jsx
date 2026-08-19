@@ -1331,6 +1331,24 @@ const BoltIcon = ({ white }) => (
 const SEC_PALETTE = [...new Set([...Object.values(SEC_COLOR),
   "#2F7D74", "#C2544D", "#4F8A3D", "#8E6BB0", "#B0713C", "#41708F"])];
 
+/* أسماء الأبنية بالعربية — مأخوذة من الأصل، لئلا يظهر مفتاح لاتيني للمستخدم */
+const BUILD_AR = {};
+DEFAULT_SECS.forEach((s) => s.items.forEach((i) => { BUILD_AR[i.i] = i.b; }));
+
+/* حقل رقمي بأرقام عربية — §١٠ لا حروف ولا أرقام لاتينية في الواجهة */
+function NumField({ value, min, max, onChange, unit }) {
+  const set = (v) => onChange(Math.max(min, Math.min(max, v)));
+  return (
+    <div style={S.edNum}>
+      <button style={S.edNumB} onClick={() => set(value - 1)}
+        disabled={value <= min} aria-label="أنقص">−</button>
+      <span style={S.edNumV}>{ar(value)}{unit ? ` ${unit}` : ""}</span>
+      <button style={S.edNumB} onClick={() => set(value + 1)}
+        disabled={value >= max} aria-label="زد">+</button>
+    </div>
+  );
+}
+
 const uniqKey = (base, taken) => {
   let k = base || "s", n = 1;
   while (taken.has(k)) k = `${base || "s"}${++n}`;
@@ -1467,7 +1485,9 @@ export function SunanEditor({ embedded = false }) {
   });
 
   /* ── التصدير: كتلة تُلصق مكان DEFAULT_SECS ── */
-  const q = (v) => String(v).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+  /* نصّ صالح داخل علامتَي اقتباس مفردتين — والسطر الجديد يُكتب \n لا سطرًا فعليًا */
+  const q = (v) => String(v)
+    .replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/\r?\n/g, "\\n");
   const exportCode = () => {
     const body = secs.map((s) => {
       const head = SEC_COLOR[s.id] === s.c ? `{id:'${s.id}',t:'${q(s.t)}'` : `{id:'${s.id}',t:'${q(s.t)}',c:'${s.c}'`;
@@ -1608,14 +1628,14 @@ export function SunanEditor({ embedded = false }) {
           <div style={{ display: "flex", gap: 9 }}>
             <div style={{ flex: 1 }}>
               <div style={S.aLbl}>الجواهر لكل خطوة</div>
-              <input type="number" min="0" max="99" value={item.g} style={S.edInput}
-                onChange={(e) => patch(item.k, "g", Math.max(0, +e.target.value || 0))} />
+              <NumField value={item.g} min={0} max={99}
+                onChange={(v) => patch(item.k, "g", v)} />
             </div>
             {item.type === "cycle" && (
               <div style={{ flex: 1 }}>
                 <div style={S.aLbl}>نهاية العدّاد</div>
-                <input type="number" min="2" max="99" value={item.max} style={S.edInput}
-                  onChange={(e) => patch(item.k, "max", Math.max(2, +e.target.value || 2))} />
+                <NumField value={item.max} min={2} max={99}
+                  onChange={(v) => patch(item.k, "max", v)} />
               </div>
             )}
           </div>
@@ -1660,7 +1680,8 @@ export function SunanEditor({ embedded = false }) {
               const on = item.i === nm;
               const busy = (usedBuilds[nm] || 0) > 0 && !on;
               return (
-                <button key={nm} title={nm} onClick={() => patch(item.k, "i", nm)}
+                <button key={nm} title={BUILD_AR[nm] || ""} aria-label={BUILD_AR[nm] || ""}
+                  onClick={() => patch(item.k, "i", nm)}
                   style={{ ...S.aIcB, ...(on ? { borderColor: item.c, background: item.c + "1A" } : {}),
                            ...(busy ? { opacity: .4 } : {}) }}>
                   <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round"
@@ -1729,7 +1750,8 @@ export function SunanEditor({ embedded = false }) {
           <div style={{ ...S.lbl, marginTop: 4 }}>
             استبدل به كتلة <span style={{ direction: "ltr", display: "inline-block" }}>const DEFAULT_SECS=[...]</span> كاملةً
           </div>
-          <textarea readOnly value={out} rows={12} style={{ ...S.aArea, direction: "ltr", textAlign: "left" }} />
+          <textarea data-code readOnly value={out} rows={12}
+            style={{ ...S.aArea, direction: "ltr", textAlign: "left", fontSize: 12 }} />
           <button style={S.dlgX}
             onClick={() => { navigator.clipboard?.writeText(out); setOut(null); }}>نسخ وإغلاق</button>
         </Overlay>
@@ -1797,16 +1819,16 @@ function Styles() {
         --sp-prim:#2F7D74; --sp-mint:#6BBFB2; --sp-mintBg:rgba(107,191,178,.11);
         --sp-gold:#B99442; --sp-goldL:#D4B570; --sp-txt:#1F3B37; --sp-mut:#8B9C98;
         --sp-aura:rgba(185,148,66,.16); --sp-sh:0 2px 10px rgba(31,59,55,.05);
-        --sp-scrim:rgba(255,255,255,.93);
+        --sp-scrim:rgba(255,255,255,.93); --sp-danger:#C2544D;
       }
       [data-theme="dark"]{
         --sp-bg:#16262E; --sp-surf:#1D323B; --sp-surf2:#243C46; --sp-line:#2E4B56;
         --sp-prim:#6BBFB2; --sp-mint:#7FCFC2; --sp-mintBg:rgba(127,207,194,.13);
         --sp-gold:#D4B570; --sp-goldL:#E5CF9A; --sp-txt:#EAF2F2; --sp-mut:#93AEB4;
         --sp-aura:rgba(212,181,112,.15); --sp-sh:0 3px 14px rgba(0,0,0,.26);
-        --sp-scrim:rgba(29,50,59,.93);
+        --sp-scrim:rgba(29,50,59,.93); --sp-danger:#E0796F;
       }
-      input[type=number],input[type=range]{font-size:16px}
+      input,textarea,select{font-size:16px}
       button{font-family:inherit;cursor:pointer}
       button:disabled{opacity:.35;cursor:default}
       button:focus-visible,[role=button]:focus-visible{outline:2px solid var(--sp-gold);outline-offset:2px}
@@ -1923,7 +1945,7 @@ const S = {
             background: "var(--sp-surf)",
             borderRadius: 13, padding: 12, fontSize: 12.5, fontWeight: 600, color: "var(--sp-prim)" },
   navPri: { background: "var(--sp-prim)", color: "#fff", borderColor: "var(--sp-prim)" },
-  navDanger: { background: "#C2544D", color: "#fff", borderColor: "#C2544D" },
+  navDanger: { background: "var(--sp-danger)", color: "#fff", borderColor: "var(--sp-danger)" },
   gridEmpty: { gridColumn: "1 / -1", border: "1.5px dashed var(--sp-line)", borderRadius: 15,
                padding: 20, textAlign: "center", fontSize: 11, color: "var(--sp-mut)" },
   saveB: { width: "100%", border: "none", borderRadius: 15, padding: 16, fontSize: 15,
@@ -1986,7 +2008,7 @@ const S = {
            padding: "8px 13px", fontSize: 12, fontWeight: 700,
            boxShadow: "0 8px 22px rgba(0,0,0,.22)" },
   aLbl: { fontSize: 11, fontWeight: 700, color: "var(--sp-mut)", margin: "14px 0 6px" },
-  aArea: { width: "100%", boxSizing: "border-box", borderRadius: 12, padding: 10, fontSize: 12,
+  aArea: { width: "100%", boxSizing: "border-box", borderRadius: 12, padding: 10, fontSize: 16,
            lineHeight: 1.8, border: "1px solid var(--sp-line)", background: "var(--sp-bg)",
            color: "var(--sp-txt)", fontFamily: "inherit", resize: "vertical" },
   aIcons: { display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 5,
@@ -2001,7 +2023,7 @@ const S = {
            padding: "10px 12px", fontSize: 10.5, lineHeight: 1.9, color: "var(--sp-mut)",
            marginBottom: 12 },
   edSecName: { flex: 1, minWidth: 0, border: "1px solid var(--sp-line)", background: "var(--sp-bg)",
-               borderRadius: 9, padding: "5px 8px", fontSize: 12.5, fontWeight: 700,
+               borderRadius: 9, padding: "5px 8px", fontSize: 16, fontWeight: 700,
                color: "var(--sp-txt)", fontFamily: "inherit" },
   edMini: { width: 27, height: 27, flexShrink: 0, borderRadius: 9, fontSize: 13, lineHeight: 1,
             border: "1px solid var(--sp-line)", background: "var(--sp-bg)", color: "var(--sp-mut)" },
@@ -2009,7 +2031,7 @@ const S = {
   edAdd: { width: "100%", border: "1.5px dashed var(--sp-line)", background: "transparent",
            borderRadius: 12, padding: 10, fontSize: 11, fontWeight: 600, color: "var(--sp-prim)" },
   edInput: { width: "100%", boxSizing: "border-box", borderRadius: 12, padding: "10px 11px",
-             fontSize: 13, border: "1px solid var(--sp-line)", background: "var(--sp-bg)",
+             fontSize: 16, border: "1px solid var(--sp-line)", background: "var(--sp-bg)",
              color: "var(--sp-txt)", fontFamily: "inherit" },
   edSeg: { display: "flex", gap: 7 },
   edSegB: { flex: 1, borderRadius: 12, padding: 10, fontSize: 12, fontWeight: 700,
@@ -2019,8 +2041,15 @@ const S = {
   edCheck: { display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 600,
              cursor: "pointer" },
   edSwatch: { width: 30, height: 30, borderRadius: "50%", border: "none", flexShrink: 0 },
-  edDanger: { width: "100%", border: "1px solid #C2544D", background: "transparent", color: "#C2544D",
-              borderRadius: 13, padding: 11, fontSize: 12.5, fontWeight: 700, marginTop: 18 },
+  edNum: { display: "flex", alignItems: "center", gap: 4, borderRadius: 12, padding: 4,
+           borderWidth: 1, borderStyle: "solid", borderColor: "var(--sp-line)",
+           background: "var(--sp-bg)" },
+  edNumB: { width: 34, height: 34, flexShrink: 0, borderRadius: 9, fontSize: 17, lineHeight: 1,
+            border: "none", background: "var(--sp-surf)", color: "var(--sp-prim)", fontWeight: 700 },
+  edNumV: { flex: 1, textAlign: "center", fontSize: 16, fontWeight: 700 },
+  edDanger: { width: "100%", border: "1px solid var(--sp-danger)", background: "transparent",
+              color: "var(--sp-danger)", borderRadius: 13, padding: 11, fontSize: 12.5,
+              fontWeight: 700, marginTop: 18 },
   /* تبويبات */
   tabs: { position: "fixed", bottom: 0, left: 0, right: 0, background: "var(--sp-surf)",
           borderTop: "1px solid var(--sp-line)", display: "flex", zIndex: 40, padding: "7px 0 10px" },
