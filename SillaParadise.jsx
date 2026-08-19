@@ -9,17 +9,21 @@
            الجنّة مساحة محدودة يتجوّل فيها وتنمو حتى تكتمل في ٣٠ يومًا.
 
    البنية:
-     • SUNAN            — ٢٦ سنّة في ٦ أقسام (ثابتة — لا تُعدَّل بلا إذن)
+     • DEFAULT_SECS     — الأصل: ٢٦ سنّة في ٦ أقسام، هو ما يبدأ منه كل مستخدم
+     • SUNAN / ITEMS    — المخزن الحيّ: ما يراه المستخدم بعد تعديلاته
+     • setSunan()       — بوّابة التعديل الوحيدة: تصحّح، تحفظ، تُخطر كل الشاشات
      • DRAW             — رسّام لكل بناء، يأخذ (x, y, n) حيث n = عدد الأيام (سقف ٣٠)
      • SPOT             — موضع كل بناء داخل الأرض
      • <Village/>       — المشهد: تجوّل + سلايدر الأيام + معاينة اليوم ٣٠
      • <Recorder/>      — التعبئة: أقسام + شبكة ٣×٣ + سنن سريعة
+     • <SunanEditor/>   — التحرير: أضِف وسمِّ ولوِّن الأقسام، وحرّر كل سنّة وحديثها
      • useSillaState()  — الحالة: السجلّ اليومي والجواهر والأبنية
 
    ⚠ اختبر كل رسّام عند n = 30 قبل التسليم (انظر §١٣ في CLAUDE.md).
    ════════════════════════════════════════════════════════════════════════════ */
 
-import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useRef, useEffect, useMemo, useCallback,
+         useSyncExternalStore } from "react";
 
 /* ════════ ثوابت ════════ */
 export const DAYS_TOTAL = 30;          // أيام الشهر — سقف كل بناء
@@ -100,7 +104,7 @@ export const ICON_NAMES = Object.keys(IC);
    b: ما يبنيه في الجنّة · h: الحديث أو الفضل
    q/qt: وسم السنن السريعة (الوقت والتلميح)                                  */
 
-const SECS=[
+const DEFAULT_SECS=[
  {id:'salah',t:'سنن الصلاة',items:[
   {k:'iqama',n:'إقامة الصلاة',i:'mihrab',b:'محراب',type:'cycle',max:5,g:2,
    h:'«الصلاة عماد الدين» — يرتفع محرابك مع كل صلاة تقيمها.'},
@@ -160,13 +164,89 @@ const SECS=[
   {k:'himaya',n:'دعاء الحماية',i:'fence',b:'سياج نور',type:'bool',g:3,q:'١ د',qt:'دعاء المساء',
    h:'«من قالها حين يمسي لم يضره شيء» — سياجٌ يحوط جنّتك.'}]}];
 
-/* i = البناء في المشهد (ثابت) · ic = أيقونة الواجهة (تُعدَّل من لوحة الإدارة) */
-SECS.forEach((s) => s.items.forEach((i) => { i.c = SEC_COLOR[s.id]; i.sec = s.id; i.ic = i.ic || i.i; }));
-export const SUNAN = SECS;
-export const ITEMS = SECS.flatMap((s) => s.items);
-export const TOTAL = ITEMS.length;
+/* ════════ مخزن السنن الحيّ ════════
+   السنن لم تعد ثابتة: <SunanEditor/> يعدّلها، والمخزن يخطر كل الشاشات فتتحدّث
+   فورًا. الشكل المحفوظ في localStorage هو نفسه شكل DEFAULT_SECS أعلاه، فما
+   تصدّره اللوحة يمكن لصقه هنا ليصير هو الأصل.
+     • i  = البناء في المشهد (مفتاح في DRAW/SPOT)
+     • ic = أيقونة الواجهة — تغييرها لا يمسّ ما يُبنى                        */
+
+export const LS_SUNAN = "silla.sunan.v1";
+const FALLBACK_C = "#7B8FA6";
+
+/* لون القسم: لون محفوظ عليه، وإلا لون الهوية، وإلا لون محايد */
+export const secColor = (s) => (s && s.c) || (s && SEC_COLOR[s.id]) || FALLBACK_C;
+
+/* يضبط الحقول المشتقّة ويصحّح القيم — كل ما يدخل المخزن يمرّ من هنا */
+export function normalizeSecs(list) {
+  return (Array.isArray(list) ? list : []).filter((s) => s && s.id).map((s) => {
+    const c = secColor(s);
+    return {
+      id: String(s.id), t: String(s.t || s.id), c,
+      items: (Array.isArray(s.items) ? s.items : []).filter((i) => i && i.k).map((i) => {
+        const type = i.type === "cycle" ? "cycle" : "bool";
+        const it = {
+          ...i, k: String(i.k), n: String(i.n || ""), i: i.i, ic: i.ic || i.i,
+          b: String(i.b || ""), h: String(i.h || ""),
+          type, g: Math.max(0, Math.round(+i.g || 0)), sec: String(s.id), c,
+        };
+        if (type === "cycle") it.max = Math.max(2, Math.min(99, Math.round(+i.max || 5)));
+        else delete it.max;
+        if (i.q) { it.q = String(i.q); it.qt = String(i.qt || ""); }
+        else { delete it.q; delete it.qt; }
+        return it;
+      }),
+    };
+  });
+}
+
+const DEFAULTS = normalizeSecs(DEFAULT_SECS);
+const deep = (l) => JSON.parse(JSON.stringify(l));
+export const defaultSunan = () => deep(DEFAULTS);
+
+/* ارتباطات حيّة: إعادة الإسناد هنا تصل إلى كل من يستورد الاسم */
+export let SUNAN = defaultSunan();
+export let ITEMS = SUNAN.flatMap((s) => s.items);
+export let TOTAL = ITEMS.length;
 export const findItem = (k) => ITEMS.find((i) => i.k === k);
 export const QUICK = () => ITEMS.filter((i) => i.q);
+
+let sunanVer = 0;
+const sunanSubs = new Set();
+
+export function setSunan(next, { persist = true } = {}) {
+  SUNAN = normalizeSecs(next);
+  ITEMS = SUNAN.flatMap((s) => s.items);
+  TOTAL = ITEMS.length;
+  sunanVer++;
+  if (persist) {
+    try { window.localStorage.setItem(LS_SUNAN, JSON.stringify(SUNAN)); } catch (e) { /* تجاهل */ }
+  }
+  sunanSubs.forEach((f) => f());
+}
+
+export function resetSunan() {
+  try { window.localStorage.removeItem(LS_SUNAN); } catch (e) { /* تجاهل */ }
+  setSunan(defaultSunan(), { persist: false });
+}
+
+/* القراءة من التخزين تتم بعد التركيب فقط — حتى لا يختلف خادم Next عن المتصفّح */
+export function hydrateSunan() {
+  try {
+    const raw = window.localStorage.getItem(LS_SUNAN);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length) setSunan(parsed, { persist: false });
+  } catch (e) { /* تجاهل */ }
+}
+
+const subSunan = (f) => { sunanSubs.add(f); return () => sunanSubs.delete(f); };
+const getVer = () => sunanVer;
+
+/* كل شاشة تقرأ السنن تستدعي هذا فتعاد بناؤها عند أي تعديل */
+export function useSunanVersion() {
+  return useSyncExternalStore(subSunan, getVer, getVer);
+}
 
 /* ════════ التاريخ الهجري ════════ */
 export const HM = ["محرّم","صفر","ربيع الأول","ربيع الآخر","جمادى الأولى","جمادى الآخرة",
@@ -220,6 +300,7 @@ export const gLabel = (d) => `الموافق ${ar(d.getDate())} ${GM[d.getMonth(
 export const MONTHLY = true;
 
 export function useSillaState(initialLog = {}) {
+  const sv = useSunanVersion();          /* أي تعديل على السنن يعيد حساب ما تحته */
   const [log, setLog] = useState(initialLog);
   const [start, setStart] = useState(() => monthStart(today()));   // بداية الشهر المعروض
   const [dayKey, setDayKey] = useState(() => iso(today()));        // اليوم المفتوح للتعبئة
@@ -239,7 +320,7 @@ export function useSillaState(initialLog = {}) {
       d[k] = i.type === "bool" ? (b ? 0 : 1) : b >= i.max ? 0 : b + 1;
       return { ...L, [dayKey]: d };
     });
-  }, [dayKey]);
+  }, [dayKey, sv]);
 
   const setTime = useCallback((k, v) => {
     setLog((L) => ({ ...L, [dayKey]: { ...(L[dayKey] || {}), [k]: Math.max(0, parseInt(v) || 0) } }));
@@ -253,7 +334,7 @@ export function useSillaState(initialLog = {}) {
       const v = L[i.k] || 0;
       return a + (i.type === "cycle" ? v * i.g : v ? i.g : 0);
     }, 0);
-  }, [log]);
+  }, [log, sv]);
 
   const monthGems = useMemo(() => days.reduce((a, d) => a + dayGems(iso(d)), 0), [days, dayGems]);
   const allGems = useMemo(
@@ -274,13 +355,13 @@ export function useSillaState(initialLog = {}) {
       ITEMS.forEach((i) => { if (isDone(i, L[i.k] || 0) && t[i.k] < cap) t[i.k]++; });
     });
     return t;
-  }, [log, days]);
+  }, [log, days, sv]);
 
   /* عدد الأيام المكتملة جزئيًا في الشهر — للتقويم */
   const dayScore = useCallback((key) => {
     const L = log[key] || {};
     return ITEMS.filter((i) => isDone(i, L[i.k] || 0)).length;
-  }, [log]);
+  }, [log, sv]);
 
   const doneCount = ITEMS.filter((i) => isDone(i, day[i.k] || 0)).length;
 
@@ -641,7 +722,7 @@ DRAW.fence=(x,y,n)=>{if(!n)return;const k=Math.min(n,30);X.save();
 /* مواضع داخل الأرض المحدودة */
 /* مواضع الأبنية — محسوبة من مقاس كل بناء عند اليوم ٣٠ بلا تداخل.
    لا تُحرَّك يدويًا: أعد تشغيل مخطّط المواضع بعد أي تغيير في الرسّامين. */
-const SPOT={
+export const SPOT={
  fort:[0,0],
  fence:[0,0],
  stream:[540,357],
@@ -747,6 +828,7 @@ function drawPlayer(P) {
    <Village/> — المشهد: تجوّل · سلايدر الأيام · معاينة اليوم ٣٠
    ════════════════════════════════════════════════════════════════════ */
 export function Village({ st, theme = "light" }) {
+  useSunanVersion();
   const { tally, allGems, monthGems, start, setStart, days } = st;
   const cvRef = useRef(null);
   const stageRef = useRef(null);
@@ -991,13 +1073,15 @@ function MonthBar({ start, setStart, sub }) {
    التجزئة (chunking): قسم واحد في الشاشة بدل ٢٦ بندًا متتالية.
    ════════════════════════════════════════════════════════════════════ */
 export function Recorder({ st, onSave }) {
+  useSunanVersion();
   const [sec, setSec] = useState(0);
   const [info, setInfo] = useState(null);
   const [quick, setQuick] = useState(false);
   const { day, dayKey, setDayKey, start, setStart, days, isFuture,
           hit, isDone, dayGems, monthGems, doneCount, dayScore } = st;
 
-  const S0 = SUNAN[sec];
+  const secIdx = Math.min(sec, Math.max(0, SUNAN.length - 1));
+  const S0 = SUNAN[secIdx] || { id: "-", t: "", items: [] };
   const quickLeft = QUICK().filter((i) => !isDone(i, day[i.k] || 0)).length;
   const sel = fromIso(dayKey);
   const todayKey = iso(today());
@@ -1040,7 +1124,7 @@ export function Recorder({ st, onSave }) {
             <circle cx="31" cy="31" r="26" stroke="var(--sp-bg)" strokeWidth="7" fill="none" />
             <circle cx="31" cy="31" r="26" stroke="url(#spg)" strokeWidth="7" fill="none"
               strokeLinecap="round" strokeDasharray="164"
-              strokeDashoffset={164 * (1 - doneCount / TOTAL)}
+              strokeDashoffset={164 * (1 - (TOTAL ? doneCount / TOTAL : 0))}
               style={{ transition: "stroke-dashoffset .6s cubic-bezier(.2,.9,.3,1)" }} />
             <defs><linearGradient id="spg" x1="0" y1="0" x2="1" y2="1">
               <stop offset="0%" stopColor="var(--sp-mint)" />
@@ -1076,10 +1160,10 @@ export function Recorder({ st, onSave }) {
       <div style={S.secTabs}>
         {SUNAN.map((s, i) => {
           const d = s.items.filter((it) => isDone(it, day[it.k] || 0)).length;
-          const full = d === s.items.length;
+          const full = s.items.length > 0 && d === s.items.length;
           return (
             <div key={s.id} onClick={() => setSec(i)}
-              style={{ ...S.sTab, ...(i === sec ? S.sTabOn : {}), ...(full && i !== sec ? S.sTabDone : {}) }}>
+              style={{ ...S.sTab, ...(i === secIdx ? S.sTabOn : {}), ...(full && i !== secIdx ? S.sTabDone : {}) }}>
               <div style={S.st}>{s.t}</div>
               <div style={S.sc}>{ar(d)}/{ar(s.items.length)}{full ? " ✓" : ""}</div>
             </div>
@@ -1089,6 +1173,9 @@ export function Recorder({ st, onSave }) {
 
       {/* شبكة ٣×٣ للقسم الحالي */}
       <div style={S.grid}>
+        {S0.items.length === 0 && (
+          <div style={S.gridEmpty}>لا سنن في هذا القسم بعد — أضِفها من «تحرير السنن».</div>
+        )}
         {S0.items.map((i) => {
           const v = day[i.k] || 0;
           const full = isDone(i, v);
@@ -1116,10 +1203,10 @@ export function Recorder({ st, onSave }) {
       </div>
 
       <div style={S.navRow}>
-        <button style={S.navBtn} disabled={sec === 0} onClick={() => setSec((s) => s - 1)}>السابق</button>
-        <button style={{ ...S.navBtn, ...S.navPri }} disabled={sec === SUNAN.length - 1}
-          onClick={() => setSec((s) => s + 1)}>
-          {sec === SUNAN.length - 1 ? "تمّت كل الأقسام" : "القسم التالي ←"}
+        <button style={S.navBtn} disabled={secIdx === 0} onClick={() => setSec(secIdx - 1)}>السابق</button>
+        <button style={{ ...S.navBtn, ...S.navPri }} disabled={secIdx >= SUNAN.length - 1}
+          onClick={() => setSec(secIdx + 1)}>
+          {secIdx >= SUNAN.length - 1 ? "تمّت كل الأقسام" : "القسم التالي ←"}
         </button>
       </div>
 
@@ -1136,7 +1223,17 @@ export function Recorder({ st, onSave }) {
             </div>
             <div style={{ fontSize: 15, fontWeight: 700 }}>{info.n}</div>
             <div style={S.dlgH}>{info.h}</div>
-            <div style={S.dlgB}>يبني في جنّتك: {info.b} · +{ar(info.g)} جوهرة</div>
+            <div style={S.dlgB}>
+              <div style={S.dlgBHalf}>
+                <div style={S.dlgBK}>يبني في جنّتك</div>
+                <div style={S.dlgBV}>{info.b}</div>
+              </div>
+              <span style={S.dlgBSep} />
+              <div style={S.dlgBHalf}>
+                <div style={S.dlgBK}>الجواهر</div>
+                <div style={{ ...S.dlgBV, direction: "ltr" }}>+{ar(info.g)}</div>
+              </div>
+            </div>
             <button style={S.dlgX} onClick={() => setInfo(null)}>فهمت</button>
           </div>
         </Overlay>
@@ -1220,29 +1317,123 @@ const BoltIcon = ({ white }) => (
 );
 
 /* ════════════════════════════════════════════════════════════════════
-   <SillaAdmin/> — لوحة الإدارة
-   • اسحب السنّة بإصبعك لتنقلها إلى قسم آخر أو ترتّبها داخل قسمها
-   • اضغطها لتحرير الفضل الذي يظهر عند علامة الاستفهام، واختيار أيقونتها
-   • «تصدير» يعطيك كتلة SECS جاهزة تُلصق في هذا الملف نفسه
-   ملاحظة: حقل i (البناء في الجنّة) ثابت لا يُعدَّل — الأيقونة حقل ic منفصل،
-   فتغييرها لا يمسّ ما يُبنى ولا تخطيط الأرض.
+   <SunanEditor/> — تحرير السنن
+   • كل تعديل يُطبَّق فورًا على المخزن الحيّ ويُحفظ في المتصفّح،
+     فتراه في «التعبئة» و«جنّة صِلة» في اللحظة نفسها.
+   • الأقسام: أضِف · سمِّ · لوِّن · رتِّب · احذف
+   • السنّة: اسحبها بإصبعك لتنقلها بين الأقسام، أو اضغطها لتحرير كل شيء
+     فيها — الحديث، الجواهر، النوع، ما تبنيه، أيقونتها، وقسمها.
+   • «تصدير» يعطيك كتلة DEFAULT_SECS جاهزة تُلصق في هذا الملف نفسه
+     لتصير هي الأصل الذي يبدأ منه كل مستخدم جديد.
    ════════════════════════════════════════════════════════════════════ */
-export function SillaAdmin({ theme = "light" }) {
-  const [secs, setSecs] = useState(() =>
-    SUNAN.map((s) => ({ id: s.id, t: s.t, items: s.items.map((i) => ({ ...i })) })));
-  const [edit, setEdit] = useState(null);          // {si, ii}
+
+/* لوحة ألوان الأقسام — الستة الأولى هي ألوان الهوية */
+const SEC_PALETTE = [...new Set([...Object.values(SEC_COLOR),
+  "#2F7D74", "#C2544D", "#4F8A3D", "#8E6BB0", "#B0713C", "#41708F"])];
+
+const uniqKey = (base, taken) => {
+  let k = base || "s", n = 1;
+  while (taken.has(k)) k = `${base || "s"}${++n}`;
+  return k;
+};
+
+export function SunanEditor({ embedded = false }) {
+  useSunanVersion();
+  const [editKey, setEditKey] = useState(null);    // مفتاح السنّة المفتوحة
+  const [secEdit, setSecEdit] = useState(null);    // معرّف القسم المفتوح
   const [out, setOut] = useState(null);
-  const [drag, setDrag] = useState(null);          // {si, ii, x, y, name, c}
+  const [ask, setAsk] = useState(null);            // {msg, onYes}
+  const [drag, setDrag] = useState(null);
   const dragRef = useRef(null);
   const moved = useRef(false);
 
-  /* سحب بالإصبع أو الفأرة — لا يعتمد على HTML5 DnD فيعمل على الجوال */
-  const start = (si, ii, e) => {
+  const secs = SUNAN;
+  const BUILDS = Object.keys(SPOT);
+
+  /* كل تحرير: انسخ الحالي، عدّل النسخة، سلّمها للمخزن */
+  const mut = (f) => { const N = deep(SUNAN); f(N); setSunan(N); };
+
+  const locate = (k) => {
+    for (let si = 0; si < secs.length; si++) {
+      const ii = secs[si].items.findIndex((x) => x.k === k);
+      if (ii >= 0) return { si, ii, item: secs[si].items[ii] };
+    }
+    return null;
+  };
+  const at = editKey ? locate(editKey) : null;
+  const item = at ? at.item : null;
+  const sec = secEdit != null ? secs.find((s) => s.id === secEdit) : null;
+
+  /* ── تعديلات السنّة ── */
+  const patch = (k, field, v) => mut((N) => {
+    for (const s of N) { const it = s.items.find((x) => x.k === k); if (it) { it[field] = v; return; } }
+  });
+  const patchMany = (k, obj) => mut((N) => {
+    for (const s of N) { const it = s.items.find((x) => x.k === k); if (it) { Object.assign(it, obj); return; } }
+  });
+  const moveItem = (k, toSecId, toIdx) => mut((N) => {
+    let it = null, fromId = null;
+    for (const s of N) {
+      const j = s.items.findIndex((x) => x.k === k);
+      if (j >= 0) { fromId = s.id; it = s.items.splice(j, 1)[0]; if (s.id === toSecId && toIdx != null && j < toIdx) toIdx--; break; }
+    }
+    const t = N.find((s) => s.id === toSecId);
+    if (!it || !t) return;
+    const idx = toIdx == null ? t.items.length : Math.max(0, Math.min(t.items.length, toIdx));
+    t.items.splice(idx, 0, it);
+  });
+  const delItem = (k) => { setEditKey(null); mut((N) => {
+    for (const s of N) { const j = s.items.findIndex((x) => x.k === k); if (j >= 0) { s.items.splice(j, 1); return; } }
+  }); };
+  const addItem = (secId) => {
+    const taken = new Set(ITEMS.map((i) => i.k));
+    const k = uniqKey("sunnah", taken);
+    const used = new Set(ITEMS.map((i) => i.i));
+    const build = BUILDS.find((b) => !used.has(b)) || BUILDS[0];
+    mut((N) => {
+      const t = N.find((s) => s.id === secId); if (!t) return;
+      t.items.push({ k, n: "سنّة جديدة", i: build, ic: build, b: "بناء جديد",
+                     type: "bool", g: 2, h: "اكتب هنا الحديث أو الفضل الذي يظهر عند علامة الاستفهام." });
+    });
+    setEditKey(k);
+  };
+
+  /* ── تعديلات القسم ── */
+  const patchSec = (id, field, v) => mut((N) => {
+    const t = N.find((s) => s.id === id); if (t) t[field] = v;
+  });
+  const moveSec = (id, dir) => mut((N) => {
+    const j = N.findIndex((s) => s.id === id), to = j + dir;
+    if (j < 0 || to < 0 || to >= N.length) return;
+    N.splice(to, 0, N.splice(j, 1)[0]);
+  });
+  const addSec = () => {
+    const taken = new Set(secs.map((s) => s.id));
+    const id = uniqKey("sec", taken);
+    mut((N) => N.push({ id, t: "قسم جديد", c: SEC_PALETTE[N.length % SEC_PALETTE.length], items: [] }));
+    setSecEdit(id);
+  };
+  const delSec = (id) => {
+    const s = secs.find((x) => x.id === id);
+    if (!s) return;
+    if (secs.length === 1) { setAsk({ msg: "لا يمكن حذف آخر قسم.", only: true }); return; }
+    const go = () => { setSecEdit(null); mut((N) => {
+      const j = N.findIndex((x) => x.id === id); if (j < 0) return;
+      const [gone] = N.splice(j, 1);
+      const home = N[Math.max(0, j - 1)];
+      if (home) home.items.push(...gone.items);       /* لا تضيع السنن */
+    }); };
+    if (s.items.length) setAsk({ msg: `سيُحذف «${s.t}» وتنتقل ${ar(s.items.length)} من سننه إلى القسم المجاور. أتمضي؟`, onYes: go });
+    else go();
+  };
+
+  /* ── السحب بالإصبع أو الفأرة — يعمل على الجوال ── */
+  const startDrag = (k, e) => {
     const pt = e.touches ? e.touches[0] : e;
-    dragRef.current = { si, ii, x: pt.clientX, y: pt.clientY };
+    const f = locate(k); if (!f) return;
+    dragRef.current = { k, x: pt.clientX, y: pt.clientY };
     moved.current = false;
-    const it = secs[si].items[ii];
-    setDrag({ si, ii, x: pt.clientX, y: pt.clientY, name: it.n, c: it.c, ic: it.ic });
+    setDrag({ k, x: pt.clientX, y: pt.clientY, name: f.item.n, c: f.item.c, ic: f.item.ic });
   };
   const over = (e) => {
     if (!dragRef.current) return;
@@ -1255,27 +1446,15 @@ export function SillaAdmin({ theme = "light" }) {
     const d = dragRef.current; dragRef.current = null;
     const cur = drag; setDrag(null);
     if (!d) return;
-    if (!moved.current) { setEdit({ si: d.si, ii: d.ii }); return; }
+    if (!moved.current) { setEditKey(d.k); return; }        /* ضغطة قصيرة = تحرير */
     const pt = e.changedTouches ? e.changedTouches[0] : (cur ? { clientX: cur.x, clientY: cur.y } : null);
     if (!pt) return;
     const el = document.elementFromPoint(pt.clientX, pt.clientY);
     const zone = el && el.closest("[data-sec]");
     if (!zone) return;
-    const toSec = +zone.dataset.sec;
     const row = el.closest("[data-row]");
-    const toIdx = row ? +row.dataset.row : secs[toSec].items.length;
-    setSecs((S) => {
-      const N = S.map((s) => ({ ...s, items: [...s.items] }));
-      const [it] = N[d.si].items.splice(d.ii, 1);
-      if (!it) return S;
-      it.sec = N[toSec].id; it.c = SEC_COLOR[N[toSec].id];
-      let at = toIdx;
-      if (d.si === toSec && d.ii < toIdx) at--;
-      N[toSec].items.splice(Math.max(0, Math.min(N[toSec].items.length, at)), 0, it);
-      return N;
-    });
+    moveItem(d.k, zone.dataset.sec, row ? +row.dataset.row : null);
   };
-
   useEffect(() => {
     if (!drag) return;
     const m = (e) => over(e), u = (e) => drop(e);
@@ -1287,17 +1466,12 @@ export function SillaAdmin({ theme = "light" }) {
     };
   });
 
-  const patch = (si, ii, field, v) =>
-    setSecs((S) => S.map((s, a) => a !== si ? s
-      : { ...s, items: s.items.map((it, b) => b !== ii ? it : { ...it, [field]: v }) }));
-
-  const item = edit ? secs[edit.si]?.items[edit.ii] : null;
-  const q = (v) => String(v).replace(/'/g, "\\'");
-
+  /* ── التصدير: كتلة تُلصق مكان DEFAULT_SECS ── */
+  const q = (v) => String(v).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
   const exportCode = () => {
-    const body = secs.map((s) =>
-      ` {id:'${s.id}',t:'${q(s.t)}',items:[\n` +
-      s.items.map((i) => {
+    const body = secs.map((s) => {
+      const head = SEC_COLOR[s.id] === s.c ? `{id:'${s.id}',t:'${q(s.t)}'` : `{id:'${s.id}',t:'${q(s.t)}',c:'${s.c}'`;
+      return ` ${head},items:[\n` + s.items.map((i) => {
         const bits = [`k:'${i.k}'`, `n:'${q(i.n)}'`, `i:'${i.i}'`];
         if (i.ic !== i.i) bits.push(`ic:'${i.ic}'`);
         bits.push(`b:'${q(i.b)}'`, `type:'${i.type}'`);
@@ -1305,65 +1479,83 @@ export function SillaAdmin({ theme = "light" }) {
         bits.push(`g:${i.g}`);
         if (i.q) bits.push(`q:'${q(i.q)}'`, `qt:'${q(i.qt)}'`);
         return `  {${bits.join(",")},\n   h:'${q(i.h)}'}`;
-      }).join(",\n") + "]}"
-    ).join(",\n");
-    setOut("const SECS=[\n" + body + "];");
+      }).join(",\n") + "]}";
+    }).join(",\n");
+    setOut("const DEFAULT_SECS=[\n" + body + "];");
   };
 
-  const moveTo = (dir) => {
-    if (!edit) return;
-    const to = edit.si + dir;
-    if (to < 0 || to >= secs.length) return;
-    setSecs((S) => {
-      const N = S.map((s) => ({ ...s, items: [...s.items] }));
-      const [it] = N[edit.si].items.splice(edit.ii, 1);
-      it.sec = N[to].id; it.c = SEC_COLOR[N[to].id];
-      N[to].items.push(it);
-      return N;
-    });
-    setEdit({ si: to, ii: secs[to].items.length });
-  };
+  const usedBuilds = {};
+  ITEMS.forEach((i) => { usedBuilds[i.i] = (usedBuilds[i.i] || 0) + 1; });
 
-  return (
-    <div data-theme={theme} style={S.root} dir="rtl">
-      <Styles />
-      <div style={S.wrap}>
-        <div style={S.head}>
-          <div>
-            <div style={S.h1}>ترتيب السنن</div>
-            <div style={S.sub}>اسحب السنّة لتنقلها · اضغطها لتحرير فضلها وأيقونتها</div>
-          </div>
+  const body = (
+    <div style={S.wrap}>
+      <div style={S.head}>
+        <div>
+          <div style={S.h1}>تحرير السنن</div>
+          <div style={S.sub}>اسحب السنّة لتنقلها · اضغطها لتحرير كل تفاصيلها</div>
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button style={S.edBtn} onClick={addSec}>＋ قسم</button>
           <button style={S.expB} onClick={exportCode}>تصدير</button>
         </div>
+      </div>
 
-        {secs.map((s, si) => (
-          <div key={s.id} data-sec={si} style={S.aSec}>
-            <div style={S.aSecH}>
-              <span style={{ ...S.aDotC, background: SEC_COLOR[s.id] }} />
-              <span style={{ fontSize: 12.5, fontWeight: 700 }}>{s.t}</span>
-              <span style={{ ...S.lbl, marginRight: "auto" }}>{ar(s.items.length)} سنن</span>
-            </div>
-            {s.items.length === 0 && <div style={S.aEmpty}>اسحب سنّة إلى هنا</div>}
-            {s.items.map((i, ii) => (
-              <div key={i.k} data-row={ii} style={{ ...S.aRow,
-                  ...(drag && drag.si === si && drag.ii === ii ? { opacity: .3 } : {}) }}
-                onMouseDown={(e) => start(si, ii, e)}
-                onTouchStart={(e) => start(si, ii, e)}>
-                <span style={S.aGrip}>⠿</span>
-                <div style={{ ...S.qRowIc, background: i.c + "1A", width: 34, height: 34 }}>
-                  <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round"
-                    strokeLinejoin="round" style={{ width: 17, height: 17, stroke: i.c }}
-                    dangerouslySetInnerHTML={{ __html: svg(i.ic) }} />
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600 }}>{i.n}</div>
-                  <div style={S.aB}>{i.b} · +{ar(i.g)}</div>
+      <div style={S.edTip}>
+        كل تعديل يُحفظ في هذا المتصفّح فورًا وتراه في بقيّة الشاشات.
+        و«تصدير» يعطيك الكتلة لتلصقها في الملف فتصير هي الأصل للجميع.
+      </div>
+
+      {secs.map((s, si) => (
+        <div key={s.id} data-sec={s.id} style={S.aSec}>
+          <div style={S.aSecH}>
+            <button style={{ ...S.aDotC, background: s.c, border: "none", padding: 0 }}
+              aria-label={`لون ${s.t}`} onClick={() => setSecEdit(s.id)} />
+            <input value={s.t} onChange={(e) => patchSec(s.id, "t", e.target.value)}
+              style={S.edSecName} aria-label="اسم القسم" />
+            <span style={{ ...S.lbl, flexShrink: 0 }}>{ar(s.items.length)}</span>
+            <button style={S.edMini} disabled={si === 0} onClick={() => moveSec(s.id, -1)} aria-label="أعلى">↑</button>
+            <button style={S.edMini} disabled={si === secs.length - 1} onClick={() => moveSec(s.id, 1)} aria-label="أسفل">↓</button>
+            <button style={S.edMini} onClick={() => setSecEdit(s.id)} aria-label="إعدادات القسم">⚙</button>
+          </div>
+
+          {s.items.length === 0 && <div style={S.aEmpty}>اسحب سنّة إلى هنا، أو أضِف واحدة</div>}
+
+          {s.items.map((i, ii) => (
+            <div key={i.k} data-row={ii} style={{ ...S.aRow,
+                ...(drag && drag.k === i.k ? { opacity: .3 } : {}) }}
+              onMouseDown={(e) => startDrag(i.k, e)}
+              onTouchStart={(e) => startDrag(i.k, e)}>
+              <span style={S.aGrip}>⠿</span>
+              <div style={{ ...S.qRowIc, background: i.c + "1A", width: 34, height: 34 }}>
+                <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round"
+                  strokeLinejoin="round" style={{ width: 17, height: 17, stroke: i.c }}
+                  dangerouslySetInnerHTML={{ __html: svg(i.ic) }} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, fontWeight: 600 }}>{i.n}</div>
+                <div style={S.aB}>
+                  {i.b} · {ar(i.g)} جوهرة · {i.type === "cycle" ? `عدّاد إلى ${ar(i.max)}` : "نعم/لا"}
+                  {i.q ? " · سريعة" : ""}
                 </div>
               </div>
-            ))}
-          </div>
-        ))}
-      </div>
+              <span style={S.edPen}>✎</span>
+            </div>
+          ))}
+
+          <button style={S.edAdd} onClick={() => addItem(s.id)}>＋ أضف سنّة إلى «{s.t}»</button>
+        </div>
+      ))}
+
+      <button style={{ ...S.navBtn, width: "100%", color: "var(--sp-mut)" }}
+        onClick={() => setAsk({ msg: "استعادة السنن الأصلية ٢٦ وإلغاء كل تعديلاتك؟", onYes: resetSunan })}>
+        استعادة الأصل
+      </button>
+    </div>
+  );
+
+  return (
+    <>
+      {body}
 
       {/* الشبح الذي يتبع الإصبع */}
       {drag && moved.current && (
@@ -1375,20 +1567,79 @@ export function SillaAdmin({ theme = "light" }) {
         </div>
       )}
 
-      {/* محرّر السنّة */}
+      {/* ── محرّر السنّة ── */}
       {item && (
-        <Overlay onClose={() => setEdit(null)} wide>
-          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 3 }}>{item.n}</div>
-          <div style={S.lbl}>يبني في الجنّة: {item.b} · لا يتغيّر</div>
+        <Overlay onClose={() => setEditKey(null)} wide>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ ...S.qRowIc, background: item.c, width: 40, height: 40 }}>
+              <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" stroke="#fff" strokeLinecap="round"
+                strokeLinejoin="round" style={{ width: 20, height: 20 }}
+                dangerouslySetInnerHTML={{ __html: svg(item.ic) }} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 700 }}>{item.n}</div>
+              <div style={S.lbl}>{secs[at.si].t}</div>
+            </div>
+          </div>
 
-          <div style={S.aLbl}>الفضل — يظهر عند علامة الاستفهام</div>
+          <div style={S.aLbl}>اسم السنّة</div>
+          <input value={item.n} style={S.edInput}
+            onChange={(e) => patch(item.k, "n", e.target.value)} />
+
+          <div style={S.aLbl}>الحديث أو الفضل — يظهر عند علامة الاستفهام</div>
           <textarea value={item.h} rows={5} style={S.aArea}
-            onChange={(e) => patch(edit.si, edit.ii, "h", e.target.value)} />
+            placeholder="«من صلى اثنتي عشرة ركعة في يوم وليلة بُني له بيت في الجنة» — مسلم."
+            onChange={(e) => patch(item.k, "h", e.target.value)} />
 
-          <div style={S.aLbl}>الأيقونة</div>
+          <div style={S.aLbl}>القسم</div>
+          <select value={secs[at.si].id} style={S.edInput}
+            onChange={(e) => moveItem(item.k, e.target.value, null)}>
+            {secs.map((s) => <option key={s.id} value={s.id}>{s.t}</option>)}
+          </select>
+
+          <div style={S.aLbl}>طريقة التسجيل</div>
+          <div style={S.edSeg}>
+            <button style={{ ...S.edSegB, ...(item.type === "bool" ? S.edSegOn : {}) }}
+              onClick={() => patchMany(item.k, { type: "bool" })}>نعم / لا</button>
+            <button style={{ ...S.edSegB, ...(item.type === "cycle" ? S.edSegOn : {}) }}
+              onClick={() => patchMany(item.k, { type: "cycle", max: item.max || 5 })}>عدّاد</button>
+          </div>
+
+          <div style={{ display: "flex", gap: 9 }}>
+            <div style={{ flex: 1 }}>
+              <div style={S.aLbl}>الجواهر لكل خطوة</div>
+              <input type="number" min="0" max="99" value={item.g} style={S.edInput}
+                onChange={(e) => patch(item.k, "g", Math.max(0, +e.target.value || 0))} />
+            </div>
+            {item.type === "cycle" && (
+              <div style={{ flex: 1 }}>
+                <div style={S.aLbl}>نهاية العدّاد</div>
+                <input type="number" min="2" max="99" value={item.max} style={S.edInput}
+                  onChange={(e) => patch(item.k, "max", Math.max(2, +e.target.value || 2))} />
+              </div>
+            )}
+          </div>
+
+          <div style={S.aLbl}>سنّة سريعة — تظهر في لوحة «سنن سريعة»</div>
+          <label style={S.edCheck}>
+            <input type="checkbox" checked={!!item.q}
+              onChange={(e) => patchMany(item.k, e.target.checked
+                ? { q: item.q || "١ د", qt: item.qt || "" } : { q: undefined, qt: undefined })} />
+            <span>اجعلها سنّة سريعة</span>
+          </label>
+          {item.q && (
+            <div style={{ display: "flex", gap: 9, marginTop: 8 }}>
+              <input value={item.q} style={{ ...S.edInput, flex: 1 }} placeholder="٣ د"
+                onChange={(e) => patch(item.k, "q", e.target.value)} />
+              <input value={item.qt || ""} style={{ ...S.edInput, flex: 2 }} placeholder="تلميح قصير"
+                onChange={(e) => patch(item.k, "qt", e.target.value)} />
+            </div>
+          )}
+
+          <div style={S.aLbl}>أيقونة الواجهة — لا تمسّ ما يُبنى</div>
           <div style={S.aIcons}>
             {ICON_NAMES.map((nm) => (
-              <button key={nm} onClick={() => patch(edit.si, edit.ii, "ic", nm)}
+              <button key={nm} onClick={() => patch(item.k, "ic", nm)}
                 style={{ ...S.aIcB, ...(item.ic === nm
                   ? { borderColor: item.c, background: item.c + "1A" } : {}) }}>
                 <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round"
@@ -1399,32 +1650,101 @@ export function SillaAdmin({ theme = "light" }) {
             ))}
           </div>
 
-          <div style={S.aLbl}>نقل سريع إلى قسم مجاور</div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button style={S.navBtn} disabled={edit.si === 0} onClick={() => moveTo(-1)}>
-              ↑ {secs[edit.si - 1]?.t || ""}
-            </button>
-            <button style={S.navBtn} disabled={edit.si === secs.length - 1} onClick={() => moveTo(1)}>
-              ↓ {secs[edit.si + 1]?.t || ""}
-            </button>
+          <div style={S.aLbl}>اسم ما يُبنى في الجنّة</div>
+          <input value={item.b} style={S.edInput} placeholder="بيت في الجنة"
+            onChange={(e) => patch(item.k, "b", e.target.value)} />
+
+          <div style={S.aLbl}>البناء نفسه — ما يظهر ويكبر في أرض جنّتك</div>
+          <div style={S.aIcons}>
+            {BUILDS.map((nm) => {
+              const on = item.i === nm;
+              const busy = (usedBuilds[nm] || 0) > 0 && !on;
+              return (
+                <button key={nm} title={nm} onClick={() => patch(item.k, "i", nm)}
+                  style={{ ...S.aIcB, ...(on ? { borderColor: item.c, background: item.c + "1A" } : {}),
+                           ...(busy ? { opacity: .4 } : {}) }}>
+                  <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round"
+                    strokeLinejoin="round" style={{ width: 19, height: 19,
+                      stroke: on ? item.c : "var(--sp-mut)" }}
+                    dangerouslySetInnerHTML={{ __html: svg(nm) }} />
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ ...S.lbl, marginTop: 6 }}>
+            الباهت مأخوذ لسنّة أخرى — لو اخترته اشترك البناءان في الموضع نفسه.
           </div>
 
-          <button style={S.dlgX} onClick={() => setEdit(null)}>تمّ</button>
+          <button style={S.edDanger}
+            onClick={() => setAsk({ msg: `حذف «${item.n}» نهائيًا؟`, onYes: () => delItem(item.k) })}>
+            حذف هذه السنّة
+          </button>
+          <button style={S.dlgX} onClick={() => setEditKey(null)}>تمّ</button>
         </Overlay>
       )}
 
-      {/* التصدير */}
+      {/* ── محرّر القسم ── */}
+      {sec && (
+        <Overlay onClose={() => setSecEdit(null)} wide>
+          <div style={{ fontSize: 15, fontWeight: 700 }}>إعدادات القسم</div>
+          <div style={S.aLbl}>اسم القسم</div>
+          <input value={sec.t} style={S.edInput}
+            onChange={(e) => patchSec(sec.id, "t", e.target.value)} />
+
+          <div style={S.aLbl}>لون القسم — يلوّن سننه كلها</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {SEC_PALETTE.map((c) => (
+              <button key={c} onClick={() => patchSec(sec.id, "c", c)}
+                aria-label={c} style={{ ...S.edSwatch, background: c,
+                  ...(sec.c === c ? { outline: "2px solid var(--sp-txt)", outlineOffset: 2 } : {}) }} />
+            ))}
+          </div>
+
+          <div style={{ ...S.lbl, marginTop: 14 }}>{ar(sec.items.length)} سنّة في هذا القسم</div>
+          <button style={S.edDanger} onClick={() => delSec(sec.id)}>حذف القسم</button>
+          <button style={S.dlgX} onClick={() => setSecEdit(null)}>تمّ</button>
+        </Overlay>
+      )}
+
+      {/* ── تأكيد ── */}
+      {ask && (
+        <Overlay onClose={() => setAsk(null)}>
+          <div style={{ fontSize: 13.5, fontWeight: 600, lineHeight: 1.9, textAlign: "center" }}>{ask.msg}</div>
+          {ask.only ? (
+            <button style={S.dlgX} onClick={() => setAsk(null)}>حسنًا</button>
+          ) : (
+            <div style={{ display: "flex", gap: 9, marginTop: 15 }}>
+              <button style={S.navBtn} onClick={() => setAsk(null)}>تراجع</button>
+              <button style={{ ...S.navBtn, ...S.navDanger }}
+                onClick={() => { ask.onYes && ask.onYes(); setAsk(null); }}>نعم، أمضِ</button>
+            </div>
+          )}
+        </Overlay>
+      )}
+
+      {/* ── التصدير ── */}
       {out && (
         <Overlay onClose={() => setOut(null)} wide>
           <div style={{ fontSize: 15, fontWeight: 700 }}>الصق هذا في SillaParadise.jsx</div>
           <div style={{ ...S.lbl, marginTop: 4 }}>
-            استبدل به كتلة <span style={{ direction: "ltr", display: "inline-block" }}>const SECS=[...]</span> كاملةً
+            استبدل به كتلة <span style={{ direction: "ltr", display: "inline-block" }}>const DEFAULT_SECS=[...]</span> كاملةً
           </div>
           <textarea readOnly value={out} rows={12} style={{ ...S.aArea, direction: "ltr", textAlign: "left" }} />
           <button style={S.dlgX}
             onClick={() => { navigator.clipboard?.writeText(out); setOut(null); }}>نسخ وإغلاق</button>
         </Overlay>
       )}
+    </>
+  );
+}
+
+/* غلاف مستقلّ — للاستعمال في صفحة خاصّة باللوحة */
+export function SillaAdmin({ theme = "light" }) {
+  useEffect(() => { hydrateSunan(); }, []);
+  return (
+    <div data-theme={theme} style={S.root} dir="rtl">
+      <Styles />
+      <SunanEditor />
     </div>
   );
 }
@@ -1432,15 +1752,16 @@ export function SillaAdmin({ theme = "light" }) {
 /* ════════════════════════════════════════════════════════════════════
    <SillaParadise/> — الغلاف: تبويبان (الجنّة · التعبئة)
    ════════════════════════════════════════════════════════════════════ */
-export default function SillaParadise({ theme = "light", initialLog = {} }) {
+export default function SillaParadise({ theme = "light", initialLog = {}, editable = true }) {
+  useEffect(() => { hydrateSunan(); }, []);   /* تعديلات هذا المتصفّح، بعد التركيب */
   const st = useSillaState(initialLog);
   const [tab, setTab] = useState("village");
   return (
     <div data-theme={theme} style={S.root} dir="rtl">
       <Styles />
-      {tab === "village"
-        ? <Village st={st} theme={theme} />
-        : <Recorder st={st} onSave={() => setTab("village")} />}
+      {tab === "village" && <Village st={st} theme={theme} />}
+      {tab === "rec" && <Recorder st={st} onSave={() => setTab("village")} />}
+      {tab === "edit" && <SunanEditor />}
       <div style={S.tabs}>
         <button style={{ ...S.tb, ...(tab === "village" ? S.tbOn : {}) }} onClick={() => setTab("village")}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" style={S.tbIc}>
@@ -1452,6 +1773,14 @@ export default function SillaParadise({ theme = "light", initialLog = {} }) {
             <path d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" /></svg>
           التعبئة
         </button>
+        {editable && (
+          <button style={{ ...S.tb, ...(tab === "edit" ? S.tbOn : {}) }} onClick={() => setTab("edit")}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"
+              strokeLinecap="round" strokeLinejoin="round" style={S.tbIc}>
+              <path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
+            تحرير السنن
+          </button>
+        )}
       </div>
     </div>
   );
@@ -1514,7 +1843,8 @@ const S = {
   zn: { fontSize: 11.5, fontWeight: 700, color: "var(--sp-gold)", whiteSpace: "nowrap" },
   zh: { fontSize: 9.5, color: "var(--sp-mut)", whiteSpace: "nowrap",
         overflow: "hidden", textOverflow: "ellipsis" },
-  pvBig: { width: "100%", border: "1.5px dashed var(--sp-goldL)", background: "var(--sp-surf)",
+  pvBig: { width: "100%", borderWidth: 1.5, borderStyle: "dashed", borderColor: "var(--sp-goldL)",
+           background: "var(--sp-surf)",
            borderRadius: 15, padding: 13, fontSize: 12, fontWeight: 600, color: "var(--sp-gold)",
            display: "flex", alignItems: "center", justifyContent: "center", gap: 9, marginBottom: 12 },
   pvOn: { background: "linear-gradient(135deg,var(--sp-goldL),var(--sp-gold))", color: "#fff",
@@ -1529,7 +1859,7 @@ const S = {
   /* شريط الأيام */
   dayStrip: { display: "flex", gap: 6, overflowX: "auto", padding: "2px 1px 9px" },
   dChip: { flexShrink: 0, minWidth: 58, padding: "8px 6px", borderRadius: 12,
-           background: "var(--sp-surf)", border: "1px solid var(--sp-line)",
+           background: "var(--sp-surf)", borderWidth: 1, borderStyle: "solid", borderColor: "var(--sp-line)",
            textAlign: "center", cursor: "pointer" },
   dChipSel: { background: "var(--sp-surf2)", borderColor: "var(--sp-gold)" },
   dh: { fontSize: 12, fontWeight: 700, lineHeight: 1.1 },
@@ -1555,7 +1885,7 @@ const S = {
          background: "linear-gradient(140deg,var(--sp-mint),var(--sp-prim))",
          display: "flex", alignItems: "center", justifyContent: "center" },
   qRow: { display: "flex", alignItems: "center", gap: 11, padding: 11, borderRadius: 13,
-          background: "var(--sp-surf2)", border: "1px solid var(--sp-line)",
+          background: "var(--sp-surf2)", borderWidth: 1, borderStyle: "solid", borderColor: "var(--sp-line)",
           marginBottom: 8, cursor: "pointer" },
   qRowIc: { width: 38, height: 38, borderRadius: 11, flexShrink: 0,
             display: "flex", alignItems: "center", justifyContent: "center" },
@@ -1564,7 +1894,8 @@ const S = {
   /* الأقسام */
   secTabs: { display: "flex", gap: 7, overflowX: "auto", padding: "2px 1px 12px" },
   sTab: { flexShrink: 0, padding: "9px 14px", borderRadius: 13, background: "var(--sp-surf)",
-          border: "1px solid var(--sp-line)", cursor: "pointer", textAlign: "center" },
+          borderWidth: 1, borderStyle: "solid", borderColor: "var(--sp-line)",
+          cursor: "pointer", textAlign: "center" },
   sTabOn: { background: "var(--sp-prim)", borderColor: "var(--sp-prim)", color: "#fff" },
   sTabDone: { borderColor: "var(--sp-gold)" },
   st: { fontSize: 11.5, fontWeight: 600, whiteSpace: "nowrap" },
@@ -1572,24 +1903,29 @@ const S = {
   /* شبكة المربّعات */
   grid: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 9, marginBottom: 14 },
   sq: { position: "relative", aspectRatio: "1", background: "var(--sp-surf)",
-        border: "1.5px solid var(--sp-line)", borderRadius: 17, padding: "9px 6px",
+        borderWidth: 1.5, borderStyle: "solid", borderColor: "var(--sp-line)",
+        borderRadius: 17, padding: "9px 6px",
         display: "flex", flexDirection: "column", alignItems: "center",
         justifyContent: "center", gap: 5, cursor: "pointer", boxShadow: "var(--sp-sh)" },
   sqIc: { width: 44, height: 44, borderRadius: 12, display: "flex",
           alignItems: "center", justifyContent: "center", transition: "all .25s" },
   sqN: { fontSize: 9.5, fontWeight: 600, lineHeight: 1.25, textAlign: "center" },
-  sqB: { position: "absolute", top: 6, left: 6, minWidth: 22, height: 20, padding: "0 5px",
+  sqB: { position: "absolute", top: 6, right: 6, minWidth: 22, height: 20, padding: "0 5px",
          borderRadius: 10, background: "var(--sp-surf)", border: "1.5px solid",
          fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" },
-  sqI: { position: "absolute", top: 6, right: 6, width: 19, height: 19, borderRadius: "50%",
+  sqI: { position: "absolute", top: 6, left: 6, width: 19, height: 19, borderRadius: "50%",
          border: "1px solid var(--sp-line)", background: "var(--sp-bg)", color: "var(--sp-mut)",
          fontSize: 9.5, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" },
-  sqD: { position: "absolute", bottom: 6, left: 6, width: 16, height: 16, borderRadius: "50%",
+  sqD: { position: "absolute", bottom: 6, right: 6, width: 16, height: 16, borderRadius: "50%",
          color: "#fff", fontSize: 9, display: "flex", alignItems: "center", justifyContent: "center" },
   navRow: { display: "flex", gap: 9, marginBottom: 13 },
-  navBtn: { flex: 1, border: "1px solid var(--sp-line)", background: "var(--sp-surf)",
+  navBtn: { flex: 1, borderWidth: 1, borderStyle: "solid", borderColor: "var(--sp-line)",
+            background: "var(--sp-surf)",
             borderRadius: 13, padding: 12, fontSize: 12.5, fontWeight: 600, color: "var(--sp-prim)" },
   navPri: { background: "var(--sp-prim)", color: "#fff", borderColor: "var(--sp-prim)" },
+  navDanger: { background: "#C2544D", color: "#fff", borderColor: "#C2544D" },
+  gridEmpty: { gridColumn: "1 / -1", border: "1.5px dashed var(--sp-line)", borderRadius: 15,
+               padding: 20, textAlign: "center", fontSize: 11, color: "var(--sp-mut)" },
   saveB: { width: "100%", border: "none", borderRadius: 15, padding: 16, fontSize: 15,
            fontWeight: 700, color: "#fff", background: "var(--sp-prim)",
            boxShadow: "0 3px 12px rgba(47,125,116,.2)" },
@@ -1603,8 +1939,13 @@ const S = {
   dlgIc: { width: 54, height: 54, margin: "0 auto 12px", borderRadius: 15,
            display: "flex", alignItems: "center", justifyContent: "center" },
   dlgH: { fontSize: 12, color: "var(--sp-mut)", lineHeight: 1.9, marginTop: 9 },
-  dlgB: { marginTop: 13, padding: 10, borderRadius: 12, background: "var(--sp-mintBg)",
-          border: "1px solid var(--sp-mint)", fontSize: 11.5, color: "var(--sp-mint)", fontWeight: 600 },
+  dlgB: { marginTop: 13, padding: "10px 6px", borderRadius: 12, background: "var(--sp-mintBg)",
+          border: "1px solid var(--sp-mint)", color: "var(--sp-mint)", fontWeight: 600,
+          display: "flex", alignItems: "stretch" },
+  dlgBHalf: { flex: 1, minWidth: 0, textAlign: "center", padding: "0 6px" },
+  dlgBK: { fontSize: 9.5, opacity: .8, fontWeight: 600, marginBottom: 3 },
+  dlgBV: { fontSize: 12.5, fontWeight: 700, lineHeight: 1.3 },
+  dlgBSep: { width: 1, alignSelf: "stretch", background: "currentColor", opacity: .3, flexShrink: 0 },
   dlgX: { width: "100%", border: "none", borderRadius: 13, padding: 12, fontSize: 13.5,
           fontWeight: 700, color: "#fff", background: "var(--sp-prim)", marginTop: 15 },
   /* شريط الشهر */
@@ -1618,7 +1959,7 @@ const S = {
   mSub: { fontSize: 9.5, color: "var(--sp-mut)", marginTop: 1 },
   /* تقويم الشهر */
   cal: { display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 6, marginBottom: 8 },
-  calD: { aspectRatio: "1", borderRadius: 12, border: "1.5px solid var(--sp-line)",
+  calD: { aspectRatio: "1", borderRadius: 12, borderWidth: 1.5, borderStyle: "solid", borderColor: "var(--sp-line)",
           background: "var(--sp-surf)", color: "var(--sp-txt)", display: "flex",
           flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3,
           padding: 0, transition: "transform .15s,border-color .2s" },
@@ -1641,7 +1982,7 @@ const S = {
   aB: { fontSize: 9.5, color: "var(--sp-mut)", marginTop: 2 },
   ghost: { position: "fixed", zIndex: 90, transform: "translate(-50%,-50%) rotate(-2deg)",
            pointerEvents: "none", display: "flex", alignItems: "center", gap: 7,
-           background: "var(--sp-surf)", border: "2px solid", borderRadius: 12,
+           background: "var(--sp-surf)", borderWidth: 2, borderStyle: "solid", borderRadius: 12,
            padding: "8px 13px", fontSize: 12, fontWeight: 700,
            boxShadow: "0 8px 22px rgba(0,0,0,.22)" },
   aLbl: { fontSize: 11, fontWeight: 700, color: "var(--sp-mut)", margin: "14px 0 6px" },
@@ -1650,8 +1991,36 @@ const S = {
            color: "var(--sp-txt)", fontFamily: "inherit", resize: "vertical" },
   aIcons: { display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 5,
             maxHeight: 150, overflowY: "auto" },
-  aIcB: { aspectRatio: "1", borderRadius: 10, border: "1.5px solid var(--sp-line)",
-          background: "var(--sp-bg)", display: "flex", alignItems: "center", justifyContent: "center" },
+  aIcB: { aspectRatio: "1", borderRadius: 10, borderWidth: 1.5, borderStyle: "solid",
+          borderColor: "var(--sp-line)", background: "var(--sp-bg)",
+          display: "flex", alignItems: "center", justifyContent: "center" },
+  /* محرّر السنن */
+  edBtn: { border: "1px solid var(--sp-line)", background: "var(--sp-surf)", color: "var(--sp-prim)",
+           borderRadius: 12, padding: "8px 13px", fontSize: 12.5, fontWeight: 700 },
+  edTip: { border: "1px solid var(--sp-line)", background: "var(--sp-surf2)", borderRadius: 13,
+           padding: "10px 12px", fontSize: 10.5, lineHeight: 1.9, color: "var(--sp-mut)",
+           marginBottom: 12 },
+  edSecName: { flex: 1, minWidth: 0, border: "1px solid var(--sp-line)", background: "var(--sp-bg)",
+               borderRadius: 9, padding: "5px 8px", fontSize: 12.5, fontWeight: 700,
+               color: "var(--sp-txt)", fontFamily: "inherit" },
+  edMini: { width: 27, height: 27, flexShrink: 0, borderRadius: 9, fontSize: 13, lineHeight: 1,
+            border: "1px solid var(--sp-line)", background: "var(--sp-bg)", color: "var(--sp-mut)" },
+  edPen: { color: "var(--sp-mut)", fontSize: 13, flexShrink: 0 },
+  edAdd: { width: "100%", border: "1.5px dashed var(--sp-line)", background: "transparent",
+           borderRadius: 12, padding: 10, fontSize: 11, fontWeight: 600, color: "var(--sp-prim)" },
+  edInput: { width: "100%", boxSizing: "border-box", borderRadius: 12, padding: "10px 11px",
+             fontSize: 13, border: "1px solid var(--sp-line)", background: "var(--sp-bg)",
+             color: "var(--sp-txt)", fontFamily: "inherit" },
+  edSeg: { display: "flex", gap: 7 },
+  edSegB: { flex: 1, borderRadius: 12, padding: 10, fontSize: 12, fontWeight: 700,
+            borderWidth: 1, borderStyle: "solid", borderColor: "var(--sp-line)",
+            background: "var(--sp-bg)", color: "var(--sp-mut)" },
+  edSegOn: { background: "var(--sp-prim)", borderColor: "var(--sp-prim)", color: "#fff" },
+  edCheck: { display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 600,
+             cursor: "pointer" },
+  edSwatch: { width: 30, height: 30, borderRadius: "50%", border: "none", flexShrink: 0 },
+  edDanger: { width: "100%", border: "1px solid #C2544D", background: "transparent", color: "#C2544D",
+              borderRadius: 13, padding: 11, fontSize: 12.5, fontWeight: 700, marginTop: 18 },
   /* تبويبات */
   tabs: { position: "fixed", bottom: 0, left: 0, right: 0, background: "var(--sp-surf)",
           borderTop: "1px solid var(--sp-line)", display: "flex", zIndex: 40, padding: "7px 0 10px" },
