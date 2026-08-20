@@ -287,6 +287,7 @@ const GS = () => SK.game;               /* للرسّامين */
 export function setSkin(on) {
   SK.game = !!on;
   GCACHE.light = GCACHE.dark = GCACHE.lightG = GCACHE.darkG = null;
+  Object.keys(SPR).forEach((n) => delete SPR[n]);
   skinVer++; skinSubs.forEach((f) => f());
   try { window.localStorage.setItem(LS_SKIN, SK.game ? "1" : "0"); } catch (e) { /* تجاهل */ }
 }
@@ -603,8 +604,11 @@ function isoBox(wx, wy, sx, sy, h, cTop, cR, cL, lift) {
 
 /* دار إيزومترية: جدران صندوقية وفوقها سقف جملونيّ عارضته على محور الأرض السينيّ */
 function isoHouse(wx, wy, sx, sy, hw, hr, C) {
-  isoBox(wx, wy, sx, sy, hw, C.wallTop, C.wallR, C.wallL);
-  const P4 = (a, b) => [IX(a, b), IY(a, b) - hw];
+  /* قاعدة أعرض قليلًا: تُجلس الدار على الأرض وتزيدها تفصيلًا */
+  isoBox(wx, wy, sx * 1.14, sy * 1.16, Math.max(3, hw * .16),
+         C.baseTop || "#CFC6AE", C.baseR || "#B3A990", C.baseL || "#93896F");
+  isoBox(wx, wy, sx, sy, hw, C.wallTop, C.wallR, C.wallL, Math.max(3, hw * .16));
+  const P4 = (a, b) => [IX(a, b), IY(a, b) - hw - Math.max(3, hw * .16)];
   const N = P4(wx - sx, wy - sy), E = P4(wx + sx, wy - sy);
   const S = P4(wx + sx, wy + sy), Wc = P4(wx - sx, wy + sy);
   const R1 = P4(wx - sx, wy), R2 = P4(wx + sx, wy);
@@ -624,11 +628,11 @@ function isoHouse(wx, wy, sx, sy, hw, hr, C) {
 /* وحدات المجموعة على شبكة في فضاء الأرض — مسافات متساوية وترتيبٌ بالعمق.
    الصفوف تنمو شمالًا (−ص) كما كانت تنمو صعودًا في التخطيط المسطّح، فتبقى
    بصمة كل مجموعة في موضعها المدروس. `mid` يوسّط الصفوف حول الموضع بدل نموّها. */
-function plot(key, k, cols, gx, gy, mid, oy) {
+function plot(key, k, cols, gx, gy, mid, oy, ox) {
   const [cx, cy] = SPOT[key], rows = Math.ceil(k / cols), out = [];
   for (let i = 0; i < k; i++) {
     const c = i % cols, r = Math.floor(i / cols);
-    out.push({ wx: cx + (c - (cols - 1) / 2) * gx,
+    out.push({ wx: cx + (ox || 0) + (c - (cols - 1) / 2) * gx,
                wy: cy + (oy || 0) + (mid ? (r - (rows - 1) / 2) : -r) * gy, i });
   }
   if (out.length) {
@@ -784,7 +788,7 @@ DRAW.stream=(x,y,n)=>{
 
 /* ── النخيل: حتى ٣٠ ── */
 DRAW.palm=(x,y,n)=>{const k=Math.min(n,30);
- plot('palm',k,5,36,30).forEach(({wx,wy,i})=>{
+ plot('palm',k,6,30,27).forEach(({wx,wy,i})=>{
   const a=IX(wx,wy),b=IY(wx,wy),s=.58+((i*7)%3)*.07;
   shadow(a,b,9,3.4);
   trunk(a,b,4.4*s,42*s,DK()?'#7E5A38':'#A87C4E',DK()?'#4A3220':'#6B4A2A');
@@ -905,7 +909,7 @@ DRAW.bridge=(x,y,n)=>{if(!n)return;const s=.7+Math.min(n,30)/30*.4;
  X.beginPath();X.moveTo(x-44*s,y-13*s);X.quadraticCurveTo(x,y-42*s,x+44*s,y-13*s);X.stroke()};
 
 DRAW.tent=(x,y,n)=>{const k=Math.min(Math.ceil(n/4),8);
- plot('tent',k,4,38,36,false,-8).forEach(({wx,wy})=>{
+ plot('tent',k,4,38,34,false,-22,-46).forEach(({wx,wy})=>{
   const a=IX(wx,wy),b=IY(wx,wy);
   shadow(a,b,21,7);
   /* هرمٌ بوجهين: غربيّ مضاء وشرقيّ ظليل، فتظهر له زاوية */
@@ -970,7 +974,7 @@ DRAW.spring=(x,y,n)=>{if(!n)return;const s=.62+Math.min(n,30)/30*.42;shadow(x,y,
   X.beginPath();X.ellipse(x,y-2,rr,rr*.38,0,0,7);X.stroke()}};
 
 DRAW.lamp=(x,y,n)=>{const k=Math.min(n,30);
- plot('lamp',k,10,22,24,false,-10).forEach(({wx,wy,i})=>{
+ plot('lamp',k,10,22,24,false,-10,26).forEach(({wx,wy,i})=>{
   const a=IX(wx,wy),b=IY(wx,wy);
   shadow(a,b,5,2);
   trunk(a,b,2.6,27,DK()?'#8E A49C'.replace(' ',''):'#B4C0B8',DK()?'#3A4A44':'#7E8C84');
@@ -1255,12 +1259,58 @@ function ground() {
   if (dk) { g.addColorStop(0, "#235A4C"); g.addColorStop(.55, "#1A473E"); g.addColorStop(1, "#102A24"); }
   else    { g.addColorStop(0, "#A6D9AC"); g.addColorStop(.55, "#89C494"); g.addColorStop(1, "#6AA377"); }
   X.fillStyle = g; X.fillRect(IN.x, IN.y, IN.w, IN.h);
-  for (let i = 0; i < 220; i++) {
-    const a = IN.x + ((i * 137) % IN.w), b = IN.y + ((i * 211) % IN.h);
-    X.globalAlpha = .05; X.fillStyle = i % 2 ? (dk ? "#2E6B58" : "#B6E4BD") : (dk ? "#123028" : "#5E9C6B");
-    X.beginPath(); X.ellipse(a, b, 12 + ((i * 11) % 22), 8, 0, 0, 7); X.fill();
+
+  /* ثلاث طبقات من التبقّع بمقاييس مختلفة — العشب المسطّح هو ما يجعل
+     المشهد يبدو فقيرًا، والتنوّع اللونيّ وحده يملؤه بلا شيء يُرسم فوقه. */
+  const rnd = (i, m) => ((i * 9301 + 49297) % 233280) / 233280 * m;
+  [[260, 34, .17], [170, 68, .13], [110, 122, .10]].forEach(([cnt, sz, al], L) => {
+    for (let i = 0; i < cnt; i++) {
+      const a = IN.x + rnd(i + L * 7, IN.w), b = IN.y + rnd(i * 3 + L * 13, IN.h);
+      X.globalAlpha = al;
+      X.fillStyle = (i + L) % 3 === 0 ? (dk ? "#2E6B58" : "#C2E9C6")
+                  : (i + L) % 3 === 1 ? (dk ? "#0E2A22" : "#54925F")
+                                      : (dk ? "#1E5244" : "#8FCB94");
+      X.beginPath();
+      X.ellipse(a, b, sz * (.5 + rnd(i * 5, .9)), sz * .5 * (.5 + rnd(i * 7, .8)),
+                rnd(i, 3), 0, 7);
+      X.fill();
+    }
+  });
+  X.globalAlpha = 1;
+
+  /* بقعُ ترابٍ عارية — تكسر رتابة الأخضر */
+  for (let i = 0; i < 26; i++) {
+    const a = IN.x + rnd(i + 91, IN.w), b = IN.y + rnd(i * 3 + 41, IN.h);
+    X.globalAlpha = .24; X.fillStyle = dk ? "#3A3020" : "#C8B893";
+    X.beginPath();
+    X.ellipse(a, b, 30 + rnd(i, 36), (30 + rnd(i, 36)) * .5, rnd(i, 3), 0, 7); X.fill();
   }
   X.globalAlpha = 1;
+
+  /* نتفُ عشبٍ قائمة — أدقّ تفصيل، وأكثره أثرًا في كثافة المشهد */
+  for (let i = 0; i < 520; i++) {
+    const a = IN.x + rnd(i + 3, IN.w), b = IN.y + rnd(i * 7 + 5, IN.h);
+    X.strokeStyle = dk ? "rgba(86,168,132,.52)" : "rgba(56,124,74,.46)";
+    X.lineWidth = 2.6; X.lineCap = "round";
+    X.beginPath();
+    for (let f = -1; f <= 1; f++) {
+      X.moveTo(a + f * 3.4, b);
+      X.quadraticCurveTo(a + f * 5.8, b - 5, a + f * 7.6 + f * 1.6, b - 11);
+    }
+    X.stroke();
+  }
+
+  /* حصى متناثر بظلٍّ خفيف */
+  for (let i = 0; i < 44; i++) {
+    const a = IN.x + rnd(i + 55, IN.w), b = IN.y + rnd(i * 5 + 17, IN.h);
+    const r = 4.4 + rnd(i, 5);
+    X.fillStyle = "rgba(20,35,30,.16)";
+    X.beginPath(); X.ellipse(a + 1, b + 1.5, r * 1.1, r * .6, 0, 0, 7); X.fill();
+    X.fillStyle = dk ? "#4A5A52" : "#B9B49E";
+    X.beginPath(); X.ellipse(a, b, r, r * .7, rnd(i, 3), 0, 7); X.fill();
+    X.fillStyle = dk ? "#5E6E66" : "#D2CCB4";
+    X.beginPath(); X.ellipse(a - r * .25, b - r * .22, r * .5, r * .3, 0, 0, 7); X.fill();
+  }
 
   /* ── الرواق: ممرّ مرصوف يطوف بالصحن ── */
   const rx = IN.x + 12, ry = IN.y + 12, rw = IN.w - 24, rh = IN.h - 24, RB = 32;
@@ -1296,7 +1346,58 @@ function ground() {
   X.strokeStyle = dk ? "rgba(212,181,112,.42)" : "rgba(185,148,66,.5)";
   X.strokeRect(IN.x - 14, IN.y - 14, IN.w + 28, IN.h + 28); X.restore();
 
+  /* ── ما يقف على الأرض من زينة: يُرفع التحويل ويُرسم منتصبًا عند موضعه ──
+     كلّه في صورة الأرض المخزّنة، فلا يكلّف إطارًا واحدًا من الحركة. */
   X.setTransform(1, 0, 0, 1, 0, 0);
+  const QUAD = [[BX0, BY0, BX1, BY1], [BX2, BY0, BX3, BY1],
+                [BX0, BY2, BX1, BY3], [BX2, BY2, BX3, BY3]];
+  const busy = Object.keys(SPOT).map((nm) => SPOT[nm]);
+  const clear = (a, b) => busy.every(([u, v]) => Math.hypot(a - u, b - v) > 96);
+  let seed = 7;
+  const rr = (m) => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648 * m; };
+  for (let i = 0; i < 190; i++) {
+    const q = QUAD[i % 4];
+    const a = q[0] + 16 + rr(q[2] - q[0] - 32), b = q[1] + 16 + rr(q[3] - q[1] - 32);
+    if (!clear(a, b)) continue;
+    const px = IX(a, b), py = IY(a, b), kind = i % 5;
+    if (kind < 3) {                                   /* شجيرة */
+      const r = 5 + rr(4);
+      X.fillStyle = "rgba(12,32,24,.22)";
+      X.beginPath(); X.ellipse(px + 1, py + 2, r * 1.1, r * .55, 0, 0, 7); X.fill();
+      const cg = X.createLinearGradient(px - r, py - r, px + r * .6, py + r * .7);
+      cg.addColorStop(0, sat(dk ? "#3E9E6E" : "#6FCB86"));
+      cg.addColorStop(1, sat(dk ? "#17513A" : "#2E7A4A"));
+      X.fillStyle = cg;
+      X.beginPath(); X.ellipse(px, py - r * .55, r, r * .82, 0, 0, 7); X.fill(); edge(1.1);
+    } else {                                          /* صخرة */
+      const r = 4 + rr(5);
+      X.fillStyle = "rgba(12,32,24,.22)";
+      X.beginPath(); X.ellipse(px + 1, py + 2, r * 1.2, r * .6, 0, 0, 7); X.fill();
+      X.fillStyle = sat(dk ? "#48584F" : "#B5B098");
+      X.beginPath(); X.ellipse(px, py - r * .3, r, r * .72, rr(3), 0, 7); X.fill(); edge(1);
+      X.fillStyle = "rgba(255,255,255,.28)";
+      X.beginPath(); X.ellipse(px - r * .3, py - r * .55, r * .42, r * .26, 0, 0, 7); X.fill();
+    }
+  }
+}
+
+/* ════════ ذاكرة الأبنية الساكنة ════════
+   السور والبيوت لا يتحرّك فيهما شيء، لكن حدودهما وحدها مئات المسارات
+   المرسومة في كل إطار. تُرسم مرّة في صورة، وتُنسخ بعدها — ولا تُعاد إلا
+   إذا تغيّر عددها أو الثيم أو الطابع. */
+const SPR = {};
+const CACHED = { fort: 1, house: 1 };
+function drawCached(nm, px, py, n) {
+  const key = n + "|" + (DK() ? 1 : 0) + "|" + (GS() ? 1 : 0);
+  let c = SPR[nm];
+  if (!c || c.key !== key) {
+    const cv = document.createElement("canvas");
+    cv.width = W; cv.height = H;
+    const prev = X; X = cv.getContext("2d");
+    try { DRAW[nm](px, py, n); } finally { X = prev; }
+    c = SPR[nm] = { key, cv };
+  }
+  X.drawImage(c.cv, 0, 0);
 }
 
 /* الأرض ثابتة لا تتغيّر — تُرسم مرّة واحدة لكل ثيم وتُنسخ كصورة كل إطار.
@@ -1483,7 +1584,8 @@ export function Village({ st, theme = "light" }) {
         const it = ITEMS.find((i) => i.i === nm); if (!it) return;
         const [a, b] = SPOT[nm], px = IX(a, b), py = IY(a, b);
         const pop = popAt(nm, px, py);
-        DRAW[nm](px, py, t[it.k] || 0);
+        if (CACHED[nm]) drawCached(nm, px, py, t[it.k] || 0);
+        else DRAW[nm](px, py, t[it.k] || 0);
         if (pop) X.restore();
       });
       /* بريقٌ يتحرّك على ماء البحرة — الأرض مخزّنة صورةً فلا حركة فيها */
@@ -1502,7 +1604,8 @@ export function Village({ st, theme = "light" }) {
         /* العمق في الإيزومتري = س+ص، وهو نفسه إحداثي الشاشة الرأسي */
         objs.push({ y: py, f: () => {
           const pop = popAt(nm, px, py), sw = swayAt(nm, px, py);
-          DRAW[nm](px, py, n);
+          if (CACHED[nm]) drawCached(nm, px, py, n);
+          else DRAW[nm](px, py, n);
           if (sw) X.restore();
           if (pop) X.restore();
         } });
