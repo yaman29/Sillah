@@ -43,6 +43,15 @@ const IZ = 0.62;                        /* الضغط الرأسي — أقلّ 
 const IOX = 469, IOY = 118;             /* ١١٨ فسحة علوية لأعلى بناء (المئذنة ٩٢) */
 export const IX = (x, y) => (x - y) * IK + IOX;
 export const IY = (x, y) => (x + y) * IK * IZ + IOY;
+/* العكس: من بكسل على الشاشة إلى موضع على الأرض */
+export const unIso = (sx, sy) => {
+  const u = (sx - IOX) / IK, v = (sy - IOY) / (IK * IZ);
+  return [(u + v) / 2, (v - u) / 2];
+};
+
+/* بصمة كل مجموعة في فضاء الأرض — تُملأ أثناء الرسم فلا تُكرَّر أرقامها،
+   وعليها يقع اختيار البناء عند اللمس. */
+export const EXTENT = {};
 
 export const ar = (n) => String(n).replace(/[0-9]/g, (d) => "٠١٢٣٤٥٦٧٨٩"[+d]);
 export const fmt = (n) => ar(Math.round(n).toLocaleString("en-US"));
@@ -548,6 +557,46 @@ function isoHouse(wx, wy, sx, sy, hw, hr, C) {
   return { N, E, S, Wc, R1, R2 };
 }
 
+/* وحدات المجموعة على شبكة في فضاء الأرض — مسافات متساوية وترتيبٌ بالعمق.
+   الصفوف تنمو شمالًا (−ص) كما كانت تنمو صعودًا في التخطيط المسطّح، فتبقى
+   بصمة كل مجموعة في موضعها المدروس. `mid` يوسّط الصفوف حول الموضع بدل نموّها. */
+function plot(key, k, cols, gx, gy, mid, oy) {
+  const [cx, cy] = SPOT[key], rows = Math.ceil(k / cols), out = [];
+  for (let i = 0; i < k; i++) {
+    const c = i % cols, r = Math.floor(i / cols);
+    out.push({ wx: cx + (c - (cols - 1) / 2) * gx,
+               wy: cy + (oy || 0) + (mid ? (r - (rows - 1) / 2) : -r) * gy, i });
+  }
+  if (out.length) {
+    const xs = out.map((q) => q.wx), ys = out.map((q) => q.wy);
+    EXTENT[key] = { x0: Math.min(...xs), x1: Math.max(...xs),
+                    y0: Math.min(...ys), y1: Math.max(...ys) };
+  }
+  return out.sort((a, b) => (a.wx + a.wy) - (b.wx + b.wy));
+}
+
+/* كتلة نباتية لها حجم: جانب مضاء وجانب ظليل وحافّة داكنة — أسلوب البيوت نفسه */
+function canopy(px, py, r, cLit, cDark) {
+  X.fillStyle = "rgba(12,32,24,.20)";
+  X.beginPath(); X.ellipse(px + r * .16, py + r * .30, r * .96, r * .70, 0, 0, 7); X.fill();
+  const g = X.createLinearGradient(px - r, py - r, px + r * .7, py + r * .8);
+  g.addColorStop(0, cLit); g.addColorStop(1, cDark);
+  X.fillStyle = g;
+  X.beginPath(); X.ellipse(px, py, r, r * .88, 0, 0, 7); X.fill();
+  X.fillStyle = "rgba(255,255,255,.20)";
+  X.beginPath(); X.ellipse(px - r * .32, py - r * .34, r * .34, r * .24, -.5, 0, 7); X.fill();
+}
+
+/* جذع بوجهين — مضاء من الغرب، ظليل من الشرق */
+function trunk(px, py, w, h, cLit, cDark) {
+  X.fillStyle = cDark;
+  X.beginPath(); X.moveTo(px - w, py); X.lineTo(px - w * .62, py - h);
+  X.lineTo(px + w * .62, py - h); X.lineTo(px + w, py); X.closePath(); X.fill();
+  X.fillStyle = cLit;
+  X.beginPath(); X.moveTo(px - w, py); X.lineTo(px - w * .62, py - h);
+  X.lineTo(px, py - h); X.lineTo(px, py); X.closePath(); X.fill();
+}
+
 function lit(x, y, w, c1, c2) {
   const g = X.createLinearGradient(x - w / 2, y, x + w / 2, y);
   g.addColorStop(0, c1); g.addColorStop(1, c2); return g;
@@ -581,15 +630,11 @@ DRAW.fort=(x,y,n)=>{
 DRAW.house=(x,y,n)=>{const k=Math.min(n,30);
  /* الشبكة في فضاء الأرض لا الشاشة، فتُسقَط صفوفًا مائلة كحيٍّ حقيقي.
     (x,y) الواصلان مُسقَطان أصلًا، فنستعيد مركز الحيّ من موضعه في SPOT. */
- const [hx,hy]=SPOT.house;
  const col={wallTop:DK()?'#CDBE92':'#F6EDD8',wallR:DK()?'#B5A57C':'#E4D7BB',
             wallL:DK()?'#8C7C58':'#C2B291',
             roofBack:DK()?'#8E6438':'#B98A52',roofFront:DK()?'#C08A50':'#DBA968',
             gable:DK()?'#7E5A32':'#A87B47'};
- const cells=[];
- for(let i=0;i<k;i++){const c=i%6,r=Math.floor(i/6);
-  cells.push({a:hx+(c-2.5)*48,b:hy+(r-2.5)*44})}
- cells.sort((p,q)=>(p.a+p.b)-(q.a+q.b));
+ const cells=plot('house',k,6,40,30,true,20).map(({wx,wy})=>({a:wx,b:wy}));
  cells.forEach(({a,b})=>{
   isoHouse(a,b,17,15,19,14,col);
   /* باب ونافذتان على الوجه الأمامي */
@@ -675,29 +720,29 @@ DRAW.stream=(x,y,n)=>{
 
 /* ── النخيل: حتى ٣٠ ── */
 DRAW.palm=(x,y,n)=>{const k=Math.min(n,30);
- for(let i=0;i<k;i++){const a=x+(i%6)*30-75,b=y-Math.floor(i/6)*26,s=.62+((i*7)%3)*.09;
- shadow(a,b,7,2.8);
- const tg=X.createLinearGradient(a-4,0,a+4,0);
- tg.addColorStop(0,DK()?'#7E5A38':'#9E7448');tg.addColorStop(1,DK()?'#4E3520':'#6B4A2A');
- X.fillStyle=tg;X.beginPath();X.moveTo(a-4*s,b);X.lineTo(a-2.4*s,b-40*s);
- X.lineTo(a+2.4*s,b-40*s);X.lineTo(a+4*s,b);X.fill();
- const sw=Math.sin(ph*.7+i)*.07;
- [[-1,-.28],[1,-.28],[0,-1],[-.75,.25],[.75,.25]].forEach(([dx,dy])=>{
-  X.save();X.translate(a,b-42*s);X.rotate(Math.atan2(dy,dx)+sw);
-  const fg=X.createLinearGradient(0,0,20*s,0);
-  fg.addColorStop(0,DK()?'#3A9E6A':'#4FB37C');fg.addColorStop(1,DK()?'#1E6B42':'#2E8A58');
-  X.fillStyle=fg;X.beginPath();X.ellipse(14*s,0,15*s,4.4*s,0,0,7);X.fill();X.restore()});
- X.fillStyle=DK()?'#C98A3C':'#D9963C';
- X.beginPath();X.arc(a,b-36*s,2.4*s,0,7);X.fill()}};
+ plot('palm',k,5,36,30).forEach(({wx,wy,i})=>{
+  const a=IX(wx,wy),b=IY(wx,wy),s=.58+((i*7)%3)*.07;
+  shadow(a,b,9,3.4);
+  trunk(a,b,4.4*s,42*s,DK()?'#7E5A38':'#A87C4E',DK()?'#4A3220':'#6B4A2A');
+  for(let r=1;r<5;r++){X.fillStyle='rgba(0,0,0,.10)';
+   X.fillRect(a-3.6*s,b-(9+r*7)*s,7.2*s,1.4*s)}
+  const sw=Math.sin(ph*.7+i)*.07;
+  /* سعفات خلفية أغمق ثم أمامية أفتح — بها يظهر العمق */
+  [[-1,-.3,0],[1,-.3,0],[0,-1,0],[-.78,.28,1],[.78,.28,1]].forEach(([dx,dy,front])=>{
+   X.save();X.translate(a,b-44*s);X.rotate(Math.atan2(dy,dx)+sw);
+   const fg=X.createLinearGradient(0,0,20*s,0);
+   if(front){fg.addColorStop(0,DK()?'#46B07A':'#5FC48C');fg.addColorStop(1,DK()?'#22764A':'#358F5E')}
+   else{fg.addColorStop(0,DK()?'#2E7E56':'#3E9868');fg.addColorStop(1,DK()?'#175434':'#256B44')}
+   X.fillStyle=fg;X.beginPath();X.ellipse(15*s,0,15*s,4.2*s,0,0,7);X.fill();X.restore()});
+  X.fillStyle=DK()?'#C98A3C':'#D9963C';
+  X.beginPath();X.arc(a,b-38*s,2.6*s,0,7);X.fill()})};
 
 DRAW.garden=(x,y,n)=>{const k=Math.min(n*2,40);
- for(let i=0;i<k;i++){const a=x+(i%8)*20-70,b=y-Math.floor(i/8)*16;
- shadow(a,b,6,2.2,.12);
- const g=X.createRadialGradient(a-1.6,b-8,1,a,b-6,7);
- g.addColorStop(0,DK()?'#5FBF87':'#7FD49F');g.addColorStop(1,DK()?'#256B45':'#3A8A5A');
- X.fillStyle=g;X.beginPath();X.arc(a,b-6,6.4,0,7);X.fill();
- X.strokeStyle=DK()?'#1E5C3A':'#2E7A4A';X.lineWidth=1.5;
- X.beginPath();X.moveTo(a,b);X.lineTo(a,b-4);X.stroke()}};
+ plot('garden',k,8,22,19).forEach(({wx,wy})=>{
+  const a=IX(wx,wy),b=IY(wx,wy);
+  X.strokeStyle=DK()?'#1E5C3A':'#2E7A4A';X.lineWidth=1.8;
+  X.beginPath();X.moveTo(a,b);X.lineTo(a,b-5);X.stroke();
+  canopy(a,b-11,7.2,DK()?'#5FBF87':'#84D9A4',DK()?'#215F3E':'#357F52')})};
 
 DRAW.dome=(x,y,n)=>{if(!n)return;const s=.55+Math.min(n,30)/30*.6;shadow(x,y,30*s,9*s);
  X.save();X.globalAlpha=(.16+Math.min(n,30)/30*.24)+Math.sin(ph*.9)*.07;
@@ -743,30 +788,33 @@ DRAW.pattern=(x,y,n)=>{if(!n)return;const k=Math.min(n,30);
   X.moveTo(a,y-7);X.lineTo(a+6,y-13);X.lineTo(a+12,y-7);X.lineTo(a+6,y-1);X.closePath();X.stroke()}};
 
 DRAW.fountain=(x,y,n)=>{const k=Math.min(Math.ceil(n/4),8);
- for(let i=0;i<k;i++){const a=x+(i%4)*46-69,b=y-Math.floor(i/4)*38;
- shadow(a,b,19,6);
- X.fillStyle=lit(a,b,40,DK()?'#8E9E96':'#C4CEC4',DK()?'#4E625C':'#8E9C92');
- X.beginPath();X.ellipse(a,b,20,8,0,0,7);X.fill();
- const wg=X.createRadialGradient(a-4,b-3,1,a,b-2,16);
- wg.addColorStop(0,DK()?'#7FD0EE':'#A8E4F8');wg.addColorStop(1,DK()?'#256B8E':'#3E8FBE');
- X.fillStyle=wg;X.beginPath();X.ellipse(a,b-2,15,6,0,0,7);X.fill();
- for(let m=0;m<2;m++){const rr=4+((ph*20+m*10)%14);
-  X.strokeStyle=`rgba(220,245,255,${(1-rr/18)*.5})`;X.lineWidth=1.1;
-  X.beginPath();X.ellipse(a,b-2,rr,rr*.38,0,0,7);X.stroke()}
- X.fillStyle=DK()?'#9EAEA6':'#D2DCD2';X.fillRect(a-3,b-20,6,18);
- X.strokeStyle='rgba(220,245,255,.8)';X.lineWidth=2;
- [-1,1].forEach(d=>{X.beginPath();X.moveTo(a,b-21);
-  X.quadraticCurveTo(a+d*10,b-26+Math.sin(ph*2+i)*2,a+d*12,b-3);X.stroke()})}};
+ plot('fountain',k,4,50,42).forEach(({wx,wy})=>{
+  const a=IX(wx,wy),b=IY(wx,wy);
+  shadow(a,b,20,7);
+  /* الحوض يستلقي على الأرض فهو بيضويّ مضغوط بميلها */
+  X.fillStyle=DK()?'#4E625C':'#93A197';
+  X.beginPath();X.ellipse(a,b+1,21,21*IZ,-.42,0,7);X.fill();
+  X.fillStyle=DK()?'#8E9E96':'#CBD5CA';
+  X.beginPath();X.ellipse(a,b-2,20,20*IZ,-.42,0,7);X.fill();
+  const wg=X.createRadialGradient(a-5,b-5,1,a,b-3,16);
+  wg.addColorStop(0,DK()?'#7FD0EE':'#A8E4F8');wg.addColorStop(1,DK()?'#256B8E':'#3E8FBE');
+  X.fillStyle=wg;X.beginPath();X.ellipse(a,b-3,15,15*IZ,-.42,0,7);X.fill();
+  for(let m=0;m<2;m++){const rr=4+((ph*20+m*10)%15);
+   X.strokeStyle=`rgba(220,245,255,${(1-rr/19)*.5})`;X.lineWidth=1.1;
+   X.beginPath();X.ellipse(a,b-3,rr,rr*IZ*.7,-.42,0,7);X.stroke()}
+  trunk(a,b-4,3.4,20,DK()?'#9EAEA6':'#DAE2D9',DK()?'#5E6E66':'#A6B2A6');
+  X.strokeStyle='rgba(220,245,255,.85)';X.lineWidth=2;
+  [-1,1].forEach(d=>{X.beginPath();X.moveTo(a,b-25);
+   X.quadraticCurveTo(a+d*11,b-33,a+d*15,b-14);X.stroke()})})};
 
 DRAW.arak=(x,y,n)=>{const k=Math.min(Math.ceil(n/3),10);
- for(let i=0;i<k;i++){const a=x+(i%5)*28-56,b=y-Math.floor(i/5)*26,s=.7+Math.min(n,30)/30*.3;
- shadow(a,b,9,3.4);
- X.fillStyle=lit(a,b,6,DK()?'#7E5A38':'#9E7448',DK()?'#4E3520':'#6B4A2A');
- X.fillRect(a-2.6*s,b-17*s,5.2*s,17*s);
- [[0,-24,12],[-7,-20,8],[7,-20,8]].forEach(([ox,oy,r])=>{
-  const cg=X.createRadialGradient(a+ox*s-r*.3,b+oy*s-r*.3,1,a+ox*s,b+oy*s,r*s);
-  cg.addColorStop(0,DK()?'#4FB37C':'#6FD49A');cg.addColorStop(1,DK()?'#1E6B42':'#3A8A5A');
-  X.fillStyle=cg;X.beginPath();X.arc(a+ox*s,b+oy*s,r*s,0,7);X.fill()})}};
+ plot('arak',k,5,34,28).forEach(({wx,wy})=>{
+  const a=IX(wx,wy),b=IY(wx,wy),s=.78+Math.min(n,30)/30*.3;
+  shadow(a,b,10,3.6);
+  trunk(a,b,3.2*s,19*s,DK()?'#7E5A38':'#A87C4E',DK()?'#4A3220':'#6B4A2A');
+  canopy(a-7.5*s,b-21*s,8.4*s,DK()?'#3E9E6E':'#5CBE86',DK()?'#1A5C38':'#2C7A4C');
+  canopy(a+7.5*s,b-21*s,8.4*s,DK()?'#3E9E6E':'#5CBE86',DK()?'#1A5C38':'#2C7A4C');
+  canopy(a,b-27*s,12*s,DK()?'#4FB37C':'#6FD49A',DK()?'#1E6B42':'#338354')})};
 
 DRAW.bighouse=(x,y,n)=>{if(!n)return;const s=.62+Math.min(n,30)/30*.45;
  const [bx,by]=SPOT.bighouse;
@@ -793,42 +841,59 @@ DRAW.bridge=(x,y,n)=>{if(!n)return;const s=.7+Math.min(n,30)/30*.4;
  X.beginPath();X.moveTo(x-44*s,y-13*s);X.quadraticCurveTo(x,y-42*s,x+44*s,y-13*s);X.stroke()};
 
 DRAW.tent=(x,y,n)=>{const k=Math.min(Math.ceil(n/4),8);
- for(let i=0;i<k;i++){const a=x+(i%4)*42-63,b=y-Math.floor(i/4)*32;shadow(a,b,20,6);
- const g=X.createLinearGradient(a-20,b-30,a+20,b);
- g.addColorStop(0,DK()?'#E5CF9A':'#E8D49A');g.addColorStop(.45,DK()?'#D4B570':'#C9A96A');
- g.addColorStop(1,DK()?'#8E7028':'#9E8248');
- X.fillStyle=g;X.beginPath();X.moveTo(a-20,b);X.lineTo(a,b-32);X.lineTo(a+20,b);X.fill();
- X.fillStyle=DK()?'#0C231E':'#4E3A22';X.beginPath();X.moveTo(a-5,b);
- X.lineTo(a-3,b-16);X.lineTo(a+3,b-16);X.lineTo(a+5,b);X.fill()}};
+ plot('tent',k,4,38,36,false,-8).forEach(({wx,wy})=>{
+  const a=IX(wx,wy),b=IY(wx,wy);
+  shadow(a,b,21,7);
+  /* هرمٌ بوجهين: غربيّ مضاء وشرقيّ ظليل، فتظهر له زاوية */
+  const apex=[a,b-34];
+  const W1=[IX(wx-19,wy+11),IY(wx-19,wy+11)],S1=[IX(wx+19,wy+11),IY(wx+19,wy+11)];
+  const E1=[IX(wx+19,wy-11),IY(wx+19,wy-11)];
+  const f=(pts,c)=>{X.fillStyle=c;X.beginPath();
+   pts.forEach((q,i)=>i?X.lineTo(q[0],q[1]):X.moveTo(q[0],q[1]));X.closePath();X.fill()};
+  f([E1,S1,apex],DK()?'#8E7028':'#A78B52');
+  f([S1,W1,apex],DK()?'#E5CF9A':'#E4D19C');
+  X.strokeStyle='rgba(0,0,0,.16)';X.lineWidth=1;
+  X.beginPath();X.moveTo(S1[0],S1[1]);X.lineTo(apex[0],apex[1]);X.stroke();
+  const dx=IX(wx,wy+11),dy=IY(wx,wy+11);
+  X.fillStyle=DK()?'#0C231E':'#4E3A22';X.beginPath();X.moveTo(dx-5,dy);
+  X.lineTo(dx-3,dy-15);X.lineTo(dx+3,dy-15);X.lineTo(dx+5,dy);X.closePath();X.fill()})};
 
 DRAW.flower=(x,y,n)=>{const FCL=['#E8657F','#F2C14E','#B87FD0','#6FD08C','#F28E4E','#5DADE2'];
  const k=Math.min(n*2,60);
- for(let i=0;i<k;i++){const a=x+(i%12)*17-93,b=y-Math.floor(i/12)*17;
- X.strokeStyle=DK()?'#2E8A58':'#3A8A50';X.lineWidth=1.4;
- const sw=Math.sin(ph+i)*1.3;
- X.beginPath();X.moveTo(a,b);X.lineTo(a+sw,b-9);X.stroke();
- const fx2=a+sw,c=FCL[i%6];
- for(let m=0;m<5;m++){const ang=m*1.257;X.fillStyle=c;
-  X.beginPath();X.ellipse(fx2+Math.cos(ang)*3,b-12+Math.sin(ang)*3,2.4,1.8,ang,0,7);X.fill()}
- X.fillStyle='#FFF3C4';X.beginPath();X.arc(fx2,b-12,1.5,0,7);X.fill()}};
+ plot('flower',k,10,19,16).forEach(({wx,wy,i})=>{
+  const a=IX(wx,wy),b=IY(wx,wy);
+  X.fillStyle='rgba(12,32,24,.14)';
+  X.beginPath();X.ellipse(a,b+1,4.5,4.5*IZ,0,0,7);X.fill();
+  X.strokeStyle=DK()?'#2E8A58':'#3A8A50';X.lineWidth=1.5;
+  const sw=Math.sin(ph+i)*1.4;
+  X.beginPath();X.moveTo(a,b);X.lineTo(a+sw,b-10);X.stroke();
+  const fx2=a+sw,c=FCL[i%6];
+  for(let m=0;m<5;m++){const ang=m*1.257;X.fillStyle=c;
+   X.beginPath();X.ellipse(fx2+Math.cos(ang)*3.2,b-13+Math.sin(ang)*3.2*IZ,2.6,2,ang,0,7);X.fill()}
+  X.fillStyle='#FFF3C4';X.beginPath();X.arc(fx2,b-13,1.6,0,7);X.fill()})};
 
 DRAW.path=(x,y,n)=>{const k=Math.min(n,30);
- for(let i=0;i<k;i++){const a=x-100+i*7,b=y+Math.sin(i*.5)*9;
- shadow(a,b,6,2,.09);
- X.fillStyle=lit(a,b,12,DK()?'#5E7068':'#E2D8BE',DK()?'#3A4A44':'#BEB295');
- X.beginPath();X.ellipse(a,b,6,3.4,Math.sin(i)*.3,0,7);X.fill()}};
+ const [cx,cy]=SPOT.path;
+ const pts=[];
+ for(let i=0;i<k;i++){const wx=cx-78+i*5.4,wy=cy+Math.sin(i*.42)*13;pts.push({wx,wy})}
+ pts.sort((p,q)=>(p.wx+p.wy)-(q.wx+q.wy)).forEach(({wx,wy},i)=>{
+  const a=IX(wx,wy),b=IY(wx,wy);
+  X.fillStyle='rgba(12,32,24,.13)';
+  X.beginPath();X.ellipse(a,b+2,7.5,7.5*IZ,-.42,0,7);X.fill();
+  X.fillStyle=lit(a,b,14,DK()?'#5E7068':'#EBE1C6',DK()?'#3A4A44':'#C6BA9C');
+  X.beginPath();X.ellipse(a,b,7,7*IZ,-.42+Math.sin(i)*.2,0,7);X.fill()})};
 
 DRAW.fruit=(x,y,n)=>{const k=Math.min(Math.ceil(n/4),8);
- for(let i=0;i<k;i++){const a=x+(i%4)*34-51,b=y-Math.floor(i/4)*30,s=.62+Math.min(n,30)/30*.32;
- shadow(a,b,11,4);
- X.fillStyle=lit(a,b,8,DK()?'#7E5A38':'#9E7448',DK()?'#4E3520':'#6B4A2A');
- X.fillRect(a-3.4*s,b-18*s,6.8*s,18*s);
- [[0,-28,15],[-9,-23,10],[9,-23,10]].forEach(([ox,oy,r])=>{
-  const cg=X.createRadialGradient(a+ox*s-r*.35,b+oy*s-r*.35,1,a+ox*s,b+oy*s,r*s);
-  cg.addColorStop(0,DK()?'#4FB37C':'#6FD49A');cg.addColorStop(1,DK()?'#1E6B42':'#3A8A5A');
-  X.fillStyle=cg;X.beginPath();X.arc(a+ox*s,b+oy*s,r*s,0,7);X.fill()});
- [[-6,-29],[6,-26],[0,-22]].forEach(([p,q])=>{
-  X.fillStyle='#E0566E';X.beginPath();X.arc(a+p*s,b+q*s,2.8*s,0,7);X.fill()})}};
+ plot('fruit',k,4,44,32).forEach(({wx,wy})=>{
+  const a=IX(wx,wy),b=IY(wx,wy),s=.72+Math.min(n,30)/30*.32;
+  shadow(a,b,12,4.4);
+  trunk(a,b,4*s,20*s,DK()?'#7E5A38':'#A87C4E',DK()?'#4A3220':'#6B4A2A');
+  canopy(a-9*s,b-23*s,10*s,DK()?'#3E9E6E':'#5CBE86',DK()?'#1A5C38':'#2C7A4C');
+  canopy(a+9*s,b-23*s,10*s,DK()?'#3E9E6E':'#5CBE86',DK()?'#1A5C38':'#2C7A4C');
+  canopy(a,b-30*s,14*s,DK()?'#4FB37C':'#6FD49A',DK()?'#1E6B42':'#338354');
+  [[-8,-32],[7,-28],[0,-24],[-3,-35]].forEach(([px,q])=>{
+   X.fillStyle='#E0566E';X.beginPath();X.arc(a+px*s,b+q*s,3*s,0,7);X.fill();
+   X.fillStyle='rgba(255,255,255,.4)';X.beginPath();X.arc(a+px*s-1,b+q*s-1,1,0,7);X.fill()})})};
 
 DRAW.spring=(x,y,n)=>{if(!n)return;const s=.62+Math.min(n,30)/30*.42;shadow(x,y,24*s,7*s,.14);
  X.fillStyle=lit(x,y,52*s,DK()?'#7E948C':'#B4C4BC',DK()?'#43605A':'#84968C');
@@ -841,17 +906,17 @@ DRAW.spring=(x,y,n)=>{if(!n)return;const s=.62+Math.min(n,30)/30*.42;shadow(x,y,
   X.beginPath();X.ellipse(x,y-2,rr,rr*.38,0,0,7);X.stroke()}};
 
 DRAW.lamp=(x,y,n)=>{const k=Math.min(n,30);
- for(let i=0;i<k;i++){const a=x+(i%10)*22-99,b=y-Math.floor(i/10)*30;
- shadow(a,b,4,1.7,.13);
- X.fillStyle=lit(a,b,5,DK()?'#7E948C':'#A8B4AC',DK()?'#3A4A44':'#6E7C74');
- X.fillRect(a-2,b-26,4,26);
- X.save();X.globalAlpha=.26+Math.sin(ph*1.5+i)*.1;
- const g=X.createRadialGradient(a,b-31,0,a,b-31,24);
- g.addColorStop(0,'#FFE9A8');g.addColorStop(1,'rgba(255,233,168,0)');
- X.fillStyle=g;X.beginPath();X.arc(a,b-31,24,0,7);X.fill();X.restore();
- X.fillStyle=DK()?'#8E7028':'#A08442';X.beginPath();
- X.moveTo(a-6,b-28);X.lineTo(a+6,b-28);X.lineTo(a+4,b-36);X.lineTo(a-4,b-36);X.closePath();X.fill();
- X.fillStyle='#FFF3C4';X.beginPath();X.arc(a,b-32,3.6,0,7);X.fill()}};
+ plot('lamp',k,10,22,24,false,-10).forEach(({wx,wy,i})=>{
+  const a=IX(wx,wy),b=IY(wx,wy);
+  shadow(a,b,5,2);
+  trunk(a,b,2.6,27,DK()?'#8E A49C'.replace(' ',''):'#B4C0B8',DK()?'#3A4A44':'#7E8C84');
+  X.save();X.globalAlpha=.26+Math.sin(ph*1.5+i)*.1;
+  const g=X.createRadialGradient(a,b-32,0,a,b-32,26);
+  g.addColorStop(0,'#FFE9A8');g.addColorStop(1,'rgba(255,233,168,0)');
+  X.fillStyle=g;X.beginPath();X.arc(a,b-32,26,0,7);X.fill();X.restore();
+  X.fillStyle=DK()?'#8E7028':'#A08442';X.beginPath();
+  X.moveTo(a-6,b-29);X.lineTo(a+6,b-29);X.lineTo(a+4,b-37);X.lineTo(a-4,b-37);X.closePath();X.fill();
+  X.fillStyle='#FFF3C4';X.beginPath();X.arc(a,b-33,3.8,0,7);X.fill()})};
 
 DRAW.well=(x,y,n)=>{if(!n)return;const s=.62+Math.min(n,30)/30*.4;shadow(x,y,18*s,5*s);
  X.fillStyle=lit(x,y,40*s,DK()?'#8E9E96':'#C4CEC4',DK()?'#4E625C':'#8E9C92');
@@ -898,6 +963,30 @@ DRAW.fence=(x,y,n)=>{if(!n)return;const k=Math.min(n,30);X.save();
   X.beginPath();X.moveTo(a,b);X.lineTo(a,b-18);X.stroke();
   X.beginPath();X.arc(a,b-21,2,0,7);X.stroke()}
  X.restore()};
+
+/* أداة تحقّق: بصمة بناءٍ على الشاشة عند يوم معيّن.
+   بها يُقاس تباعد المجموعات وخلوصها من السور — §١٢. */
+/* يرسم بناءً في سياقٍ خارجيّ — للقياس والاختبار وحدهما */
+export function drawInto(ctx, nm, n) {
+  const prev = X; X = ctx;
+  const [a, b] = SPOT[nm];
+  try { DRAW[nm](IX(a, b), IY(a, b), n === undefined ? DAYS_TOTAL : n); } finally { X = prev; }
+}
+
+export function buildBox(nm, n) {
+  const c = document.createElement("canvas");
+  c.width = W; c.height = H;
+  drawInto(c.getContext("2d"), nm, n);
+  const d = c.getContext("2d").getImageData(0, 0, W, H).data;
+  let x0 = W, y0 = H, x1 = -1, y1 = -1;
+  for (let yy = 0; yy < H; yy++) for (let xx = 0; xx < W; xx++) {
+    if (d[(yy * W + xx) * 4 + 3] > 14) {
+      if (xx < x0) x0 = xx; if (xx > x1) x1 = xx;
+      if (yy < y0) y0 = yy; if (yy > y1) y1 = yy;
+    }
+  }
+  return x1 < 0 ? null : { x0, y0, x1, y1, w: x1 - x0, h: y1 - y0 };
+}
 
 /* مواضع داخل الأرض المحدودة */
 /* مواضع الأبنية — محسوبة من مقاس كل بناء عند اليوم ٣٠ بلا تداخل.
@@ -1189,6 +1278,9 @@ export function Village({ st, theme = "light" }) {
   const joy = useRef({ x: 0, y: 0 });
   const keys = useRef({});
   const dpr = useRef(1);
+  const view = useRef({ cx: 0, cy: 0, vw: 0, vh: 0 });   /* آخر إطار — لترجمة اللمسة */
+  const tapAt = useRef(null);
+  const [tapped, setTapped] = useState(null);            /* البناء المفتوحة بطاقته */
   const prevN = useRef(null);      /* عدد الأبنية في الإطار السابق */
   const pops = useRef({});         /* ما يقفز الآن */
   const dust = useRef([]);         /* نُفَخ الغبار الحيّة */
@@ -1267,6 +1359,7 @@ export function Village({ st, theme = "light" }) {
       cam.current.y += (pjy - cam.current.y) * .11;
       const cx = Math.max(Math.min(vw, W) / 2, Math.min(W - Math.min(vw, W) / 2, cam.current.x));
       const cy = Math.max(Math.min(vh, H) / 2, Math.min(H - Math.min(vh, H) / 2, cam.current.y));
+      view.current = { cx, cy, vw, vh };
       X.setTransform(ZOOM * d, 0, 0, ZOOM * d, 0, 0);
       X.translate(-(cx - vw / 2), -(cy - vh / 2));
       X.fillStyle = DK() ? "#0A1815" : "#D8D2C0";
@@ -1414,11 +1507,63 @@ export function Village({ st, theme = "light" }) {
       <MonthBar start={start} setStart={setStart} sub={`${fmt(monthGems)} جوهرة هذا الشهر`} />
 
       <div style={S.stage} ref={stageRef}>
-        <canvas ref={cvRef} style={{ display: "block", width: "100%" }} />
+        <canvas ref={cvRef} style={{ display: "block", width: "100%" }}
+          onPointerDown={(e) => { tapAt.current = { x: e.clientX, y: e.clientY }; }}
+          onPointerUp={(e) => {
+            const d0 = tapAt.current;
+            /* إصبعٌ زحف = تمرير الصفحة، لا اختيار */
+            if (!d0 || Math.hypot(e.clientX - d0.x, e.clientY - d0.y) > 10) return;
+            const r = e.currentTarget.getBoundingClientRect();
+            const v = view.current;
+            /* من بكسل الشاشة إلى فضاء المشهد المُسقَط */
+            const sx = (e.clientX - r.left) / ZOOM + (v.cx - v.vw / 2);
+            const sy = (e.clientY - r.top) / ZOOM + (v.cy - v.vh / 2);
+            /* الأجسام قائمة فوق قاعدتها، فتُنزَّل اللمسة قليلًا قبل عكس الإسقاط */
+            const [wx, wy] = unIso(sx, sy + 14);
+            const t = bRef.current;
+            let best = null, nd = 1e9;
+            Object.keys(SPOT).forEach((nm) => {
+              if (nm === "fort" || nm === "fence") return;
+              const it = ITEMS.find((i) => i.i === nm); if (!it) return;
+              const days = t[it.k] || 0; if (!days) return;
+              const ex = EXTENT[nm];
+              let dist;
+              if (ex) {
+                /* داخل بصمة المجموعة = إصابة، ولو كانت الوحدة في طرفها */
+                const px = Math.max(ex.x0 - 22, Math.min(ex.x1 + 22, wx));
+                const py = Math.max(ex.y0 - 22, Math.min(ex.y1 + 22, wy));
+                dist = Math.hypot(wx - px, wy - py);
+              } else {
+                const [a, b] = SPOT[nm];
+                dist = Math.hypot(wx - a, wy - b) * .62;   /* بناء مفرد */
+              }
+              if (dist < nd) { nd = dist; best = { ...it, days }; }
+            });
+            if (best && nd < 46) { SFX.open(); setTapped(best); }
+            else setTapped(null);
+          }} />
         {near && (
           <div style={S.zc}>
             <div style={S.zn}>{near.b} · {ar(near.days)} من {ar(cap)}</div>
             <div style={S.zh}>{near.n}</div>
+          </div>
+        )}
+        {tapped && (
+          <div data-card style={S.card} onClick={() => setTapped(null)}>
+            <div style={S.cardTop}>
+              <div style={{ ...S.cardIc, background: tapped.c }}>
+                <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" stroke="#fff"
+                  strokeLinecap="round" strokeLinejoin="round" style={{ width: 21, height: 21 }}
+                  dangerouslySetInnerHTML={{ __html: svg(tapped.ic) }} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={S.cardB}>{tapped.b}</div>
+                <div style={S.cardN}>بناه: {tapped.n}</div>
+              </div>
+              <div style={S.cardCount}>{ar(cap)}/{ar(tapped.days)}</div>
+            </div>
+            <div style={S.cardH}>{tapped.h}</div>
+            <div style={S.cardX}>اضغط للإغلاق</div>
           </div>
         )}
         <div ref={padRef} style={S.pad}
@@ -2395,6 +2540,20 @@ const S = {
   knob: { position: "absolute", width: 36, height: 36, borderRadius: "50%", left: 24, top: 24,
           background: "radial-gradient(circle at 35% 30%,var(--sp-goldL),var(--sp-gold))",
           boxShadow: "0 2px 9px rgba(0,0,0,.35)" },
+  /* بطاقة البناء عند اللمس */
+  card: { position: "absolute", left: 11, right: 11, bottom: 11, zIndex: 6, cursor: "pointer",
+          background: "var(--sp-scrim)", borderWidth: 1.5, borderStyle: "solid",
+          borderColor: "var(--sp-goldL)", borderRadius: 16, padding: "11px 13px 9px",
+          backdropFilter: "blur(6px)", boxShadow: "0 6px 20px rgba(0,0,0,.18)" },
+  cardTop: { display: "flex", alignItems: "center", gap: 10 },
+  cardIc: { width: 38, height: 38, borderRadius: 12, flexShrink: 0,
+            display: "flex", alignItems: "center", justifyContent: "center" },
+  cardB: { fontSize: 14, fontWeight: 700, lineHeight: 1.2 },
+  cardN: { fontSize: 10, color: "var(--sp-mut)", marginTop: 2 },
+  cardCount: { flexShrink: 0, fontSize: 12, fontWeight: 700, color: "var(--sp-gold)",
+               background: "var(--sp-aura)", borderRadius: 9, padding: "4px 9px" },
+  cardH: { fontSize: 10.5, color: "var(--sp-mut)", lineHeight: 1.85, marginTop: 9 },
+  cardX: { fontSize: 8.5, color: "var(--sp-mut)", textAlign: "center", marginTop: 7, opacity: .7 },
   zc: { position: "absolute", top: 0, right: 0, left: 0, padding: "7px 13px 14px",
         background: "linear-gradient(180deg,var(--sp-scrim),transparent)",
         display: "flex", alignItems: "baseline", gap: 8, pointerEvents: "none" },
