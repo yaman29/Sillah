@@ -754,44 +754,199 @@ const BACK   = ["fort","fence","stream","crescent","shieldL","pattern","path"];
 const SORTED = ["minaret","gate","mihrab","sundial","house","dome","rug","bridge","fruit",
                 "well","palm","arak","garden","spring","lamp","bighouse","fountain","tent","flower"];
 
+/* ════════ لوحة البيت الدمشقي ════════
+   حجر كلسيّ فاتح ومداميك أغمق منه قليلًا — الأبلق في العمارة تباينٌ في
+   المداميك لا رقعة شطرنج. والرخام للبحرة وحافّات القنوات.               */
+const PAL = {
+  light: { sand:"#D8D2C0", sandDot:"#C0B8A2",
+           stone:"#E4DAC3", band:"#D3C6A9", joint:"rgba(116,96,66,.16)",
+           edge:"rgba(116,96,66,.32)",
+           marble:"#F2ECDD", water:"#9DD9F2", waterD:"#5FAEC9",
+           curb:"#DDD1B2", curbSh:"rgba(84,68,44,.22)",
+           bedIn:"#7DBA8A", bedTx:"rgba(52,104,66,.07)", gold:"#B99442" },
+  dark:  { sand:"#0A1815", sandDot:"#1A2E28",
+           stone:"#42433C", band:"#383931", joint:"rgba(0,0,0,.26)",
+           edge:"rgba(0,0,0,.42)",
+           marble:"#565749", water:"#4E93B0", waterD:"#2E6B8E",
+           curb:"#4A4B41", curbSh:"rgba(0,0,0,.34)",
+           bedIn:"#1B453B", bedTx:"rgba(0,0,0,.10)", gold:"#D4B570" },
+};
+const pal = () => (DK() ? PAL.dark : PAL.light);
+
+/* نجمة ثمانية = مربّعان متراكبان بزاوية ٤٥° — «رُبع الحزب» */
+function star8(cx, cy, r, rot) {
+  X.beginPath();
+  for (let k = 0; k < 2; k++) {
+    const a0 = (rot || 0) + k * Math.PI / 4;
+    for (let i = 0; i < 4; i++) {
+      const a = a0 + i * Math.PI / 2, px = cx + Math.cos(a) * r, py = cy + Math.sin(a) * r;
+      i ? X.lineTo(px, py) : X.moveTo(px, py);
+    }
+    X.closePath();
+  }
+}
+
+/* ممرّ مرصوف: بلاط كلسيّ بفواصل رفيعة، وشريطا مدماك أغمق على الحافّتين */
+function paveWalk(x, y, w, h, horiz) {
+  const p = pal(), unit = 27, band = 7;
+  X.save();
+  X.beginPath(); X.rect(x, y, w, h); X.clip();
+  X.fillStyle = p.stone; X.fillRect(x, y, w, h);
+
+  /* شريطا الحافّة — هما ما يعطي إحساس الأبلق بلا صخب */
+  X.fillStyle = p.band;
+  if (horiz) { X.fillRect(x, y, w, band); X.fillRect(x, y + h - band, w, band); }
+  else { X.fillRect(x, y, band, h); X.fillRect(x + w - band, y, band, h); }
+
+  /* فواصل البلاط */
+  X.strokeStyle = p.joint; X.lineWidth = 1;
+  const span = horiz ? w : h, thick = horiz ? h : w;
+  for (let i = 0; i * unit <= span; i++) {
+    X.beginPath();
+    if (horiz) { X.moveTo(x + i * unit, y); X.lineTo(x + i * unit, y + h); }
+    else { X.moveTo(x, y + i * unit); X.lineTo(x + w, y + i * unit); }
+    X.stroke();
+  }
+  for (let j = 1; j * unit < thick; j++) {
+    X.beginPath();
+    if (horiz) { X.moveTo(x, y + j * unit); X.lineTo(x + w, y + j * unit); }
+    else { X.moveTo(x + j * unit, y); X.lineTo(x + j * unit, y + h); }
+    X.stroke();
+  }
+  X.restore();
+
+  /* خطّ الحدّ */
+  X.strokeStyle = p.edge; X.lineWidth = 1.2; X.strokeRect(x + .5, y + .5, w - 1, h - 1);
+}
+
+/* قناة ماء بحافّة رخامية */
+function rill(x, y, w, h, horiz) {
+  const p = pal();
+  X.fillStyle = p.marble; X.fillRect(x - 5, y - 5, w + 10, h + 10);
+  X.strokeStyle = p.edge; X.lineWidth = 1; X.strokeRect(x - 5.5, y - 5.5, w + 11, h + 11);
+  const g = horiz ? X.createLinearGradient(0, y, 0, y + h) : X.createLinearGradient(x, 0, x + w, 0);
+  g.addColorStop(0, p.waterD); g.addColorStop(.4, p.water); g.addColorStop(1, p.waterD);
+  X.fillStyle = g; X.fillRect(x, y, w, h);
+  X.strokeStyle = "rgba(255,255,255,.2)"; X.lineWidth = 1;
+  const span = horiz ? w : h;
+  for (let i = 14; i < span; i += 34) {
+    X.beginPath();
+    if (horiz) { X.moveTo(x + i, y + 1.5); X.lineTo(x + i + 6, y + h - 1.5); }
+    else { X.moveTo(x + 1.5, y + i); X.lineTo(x + w - 1.5, y + i + 6); }
+    X.stroke();
+  }
+}
+
+/* حوض مزروع: أرض أعمق قليلًا بحافّة حجرية وظلّ تحتها */
+function parterre(x, y, w, h) {
+  const p = pal();
+  X.fillStyle = p.bedIn; X.fillRect(x, y, w, h);
+  X.save(); X.beginPath(); X.rect(x, y, w, h); X.clip();
+  X.fillStyle = p.bedTx;
+  for (let i = 0; i < 90; i++) {
+    const a = x + ((i * 149) % w), b = y + ((i * 227) % h);
+    X.beginPath(); X.ellipse(a, b, 16 + ((i * 13) % 20), 9, 0, 0, 7); X.fill();
+  }
+  X.restore();
+  X.strokeStyle = p.curbSh; X.lineWidth = 6; X.strokeRect(x + 1, y + 2, w - 2, h - 2);
+  X.strokeStyle = p.curb;   X.lineWidth = 5; X.strokeRect(x, y, w, h);
+  X.strokeStyle = p.edge;   X.lineWidth = 1; X.strokeRect(x - 2.5, y - 2.5, w + 5, h + 5);
+}
+
+/* البحرة: مثمّنة برخام ونجمة ثمانية في قاعها — قلب الصحن */
+function birka(cx, cy, r) {
+  const p = pal();
+  const oct = (rad) => {
+    X.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const a = Math.PI / 8 + i * Math.PI / 4;
+      const px = cx + Math.cos(a) * rad, py = cy + Math.sin(a) * rad * .84;
+      i ? X.lineTo(px, py) : X.moveTo(px, py);
+    }
+    X.closePath();
+  };
+  X.save();
+  X.fillStyle = "rgba(20,35,30,.16)"; oct(r + 9); X.fill();
+  X.fillStyle = p.marble;  oct(r + 6); X.fill();
+  X.strokeStyle = p.edge; X.lineWidth = 1.3; oct(r + 6); X.stroke();
+  /* نجمة ثمانية مطعّمة في حافّة الرخام */
+  X.globalAlpha = .3; X.strokeStyle = p.gold; X.lineWidth = 1.6;
+  star8(cx, cy, r + 2, 0); X.stroke(); X.globalAlpha = 1;
+  X.fillStyle = p.band; oct(r); X.fill();
+  const g = X.createRadialGradient(cx - r * .3, cy - r * .35, 3, cx, cy, r);
+  g.addColorStop(0, p.water); g.addColorStop(1, p.waterD);
+  X.fillStyle = g; oct(r - 4); X.fill();
+  X.globalAlpha = .16; X.fillStyle = p.marble;
+  star8(cx, cy, r * .46, 0); X.fill(); X.globalAlpha = 1;
+  X.fillStyle = "rgba(255,255,255,.24)";
+  X.beginPath(); X.ellipse(cx - r * .3, cy - r * .32, r * .24, r * .12, -.4, 0, 7); X.fill();
+  X.restore();
+}
+
+/* ════════ أرض الجنّة — صحن على هيئة البيت الدمشقي ════════
+   المحوران المتقاطعان أصلًا هما هيكل الچهارباغ: حديقة الجنّة القرآنية،
+   وهو نفسه تخطيط صحن الدار الدمشقية. فبُني عليهما:
+     • ممرّان بحجر أبلق، وفي الشرقيّ-الغربيّ قناة ماء
+     • بحرة مثمّنة عند التقاطع
+     • رواق مرصوف يطوف بالصحن من داخل السور
+     • أرباع مزروعة بحافّة حجرية
+   لا يمسّ هذا موضع أي بناء من الـ٢٦.                                    */
 function ground() {
-  const dk = DK();
+  const dk = DK(), p = pal();
+
   /* خارج الحدود — أرض قاحلة */
-  X.fillStyle = dk ? "#0A1815" : "#D8D2C0"; X.fillRect(0, 0, W, H);
+  X.fillStyle = p.sand; X.fillRect(0, 0, W, H);
   for (let i = 0; i < 200; i++) {
-    X.globalAlpha = 0.06; X.fillStyle = dk ? "#1A2E28" : "#C0B8A2";
+    X.globalAlpha = 0.06; X.fillStyle = p.sandDot;
     X.beginPath(); X.arc((i * 173) % W, (i * 281) % H, 4 + ((i * 7) % 9), 0, 7); X.fill();
   }
   X.globalAlpha = 1;
+
   /* داخل الحدود — أرض الجنّة */
-  const g = X.createRadialGradient(IN.x + IN.w * .4, IN.y + IN.h * .35, 40,
-                                   IN.x + IN.w / 2, IN.y + IN.h / 2, IN.w * .75);
-  if (dk) { g.addColorStop(0, "#22574A"); g.addColorStop(.6, "#18413A"); g.addColorStop(1, "#123028"); }
-  else    { g.addColorStop(0, "#9ED4A6"); g.addColorStop(.6, "#84C08E"); g.addColorStop(1, "#6BA97A"); }
+  const g = X.createRadialGradient(535, 420, 60, 535, 420, IN.w * .72);
+  if (dk) { g.addColorStop(0, "#235A4C"); g.addColorStop(.55, "#1A473E"); g.addColorStop(1, "#102A24"); }
+  else    { g.addColorStop(0, "#A6D9AC"); g.addColorStop(.55, "#89C494"); g.addColorStop(1, "#6AA377"); }
   X.fillStyle = g; X.fillRect(IN.x, IN.y, IN.w, IN.h);
   for (let i = 0; i < 220; i++) {
     const a = IN.x + ((i * 137) % IN.w), b = IN.y + ((i * 211) % IN.h);
-    X.globalAlpha = .05; X.fillStyle = i % 2 ? (dk ? "#2E6B58" : "#B0E0B8") : (dk ? "#123028" : "#5E9C6B");
+    X.globalAlpha = .05; X.fillStyle = i % 2 ? (dk ? "#2E6B58" : "#B6E4BD") : (dk ? "#123028" : "#5E9C6B");
     X.beginPath(); X.ellipse(a, b, 12 + ((i * 11) % 22), 8, 0, 0, 7); X.fill();
   }
   X.globalAlpha = 1;
-  for (let i = 0; i < 300; i++) {
-    const a = IN.x + ((i * 97) % IN.w), b = IN.y + ((i * 179) % IN.h);
-    X.strokeStyle = dk ? "rgba(60,130,105,.28)" : "rgba(70,140,90,.24)"; X.lineWidth = 1.3;
-    X.beginPath(); X.moveTo(a, b); X.quadraticCurveTo(a + 1.4, b - 4, a + 3, b - 7); X.stroke();
-  }
-  /* حدّ الأرض المخصّصة — يبيّن المساحة الكاملة من اليوم الأول */
+
+  /* ── الرواق: ممرّ مرصوف يطوف بالصحن ── */
+  const rx = IN.x + 12, ry = IN.y + 12, rw = IN.w - 24, rh = IN.h - 24, RB = 32;
+  paveWalk(rx, ry, rw, RB, true);
+  paveWalk(rx, ry + rh - RB, rw, RB, true);
+  paveWalk(rx, ry + RB, RB, rh - RB * 2, false);
+  paveWalk(rx + rw - RB, ry + RB, RB, rh - RB * 2, false);
+
+  /* ── الأرباع الأربعة: أحواض مزروعة ── */
+  const BX0 = rx + RB + 10, BX1 = 508, BX2 = 562, BX3 = rx + rw - RB - 10;
+  const BY0 = ry + RB + 10, BY1 = 391, BY2 = 449, BY3 = ry + rh - RB - 10;
+  parterre(BX0, BY0, BX1 - BX0 - 6, BY1 - BY0);
+  parterre(BX2 + 6, BY0, BX3 - BX2 - 6, BY1 - BY0);
+  parterre(BX0, BY2, BX1 - BX0 - 6, BY3 - BY2);
+  parterre(BX2 + 6, BY2, BX3 - BX2 - 6, BY3 - BY2);
+
+  /* ── المحور الشمالي-الجنوبي: ممرّ يعبر النهر على الجسر ── */
+  const NSX = 508, NSW = 54;
+  paveWalk(NSX, ry, NSW, 322 - ry, false);        /* شمال النهر */
+  paveWalk(NSX, 392, NSW, ry + rh - 392, false);  /* جنوبه */
+
+  /* ── المحور الشرقي-الغربي: ممرّ فيه قناة ماء ── */
+  const EWY = 393, EWH = 54;
+  paveWalk(rx, EWY, rw, EWH, true);
+  rill(rx + 10, EWY + 21, 484 - rx - 10, 12, true);        /* غرب البحرة */
+  rill(586, EWY + 21, rx + rw - 10 - 586, 12, true);       /* شرقها */
+
+  /* ── البحرة عند التقاطع ── */
+  birka(535, 420, 40);
+
+  /* ── الحدّ الذهبي المتقطّع — §٥: يبيّن المساحة كاملة من اليوم الأول ── */
   X.save(); X.setLineDash([9, 7]); X.lineWidth = 2.4;
-  X.strokeStyle = dk ? "rgba(212,181,112,.35)" : "rgba(185,148,66,.4)";
+  X.strokeStyle = dk ? "rgba(212,181,112,.42)" : "rgba(185,148,66,.5)";
   X.strokeRect(IN.x - 14, IN.y - 14, IN.w + 28, IN.h + 28); X.restore();
-  /* دروب: طريق شرقيّ-غربيّ، وعمود يعبر النهر على الجسر وينتهي عند القبّة */
-  [[[92, 420], [1008, 420]], [[535, 84], [535, 786]]].forEach(([p1, p2]) => {
-    X.lineCap = "round";
-    X.strokeStyle = dk ? "rgba(58,74,66,.5)" : "rgba(196,180,146,.6)"; X.lineWidth = 34;
-    X.beginPath(); X.moveTo(p1[0], p1[1]); X.lineTo(p2[0], p2[1]); X.stroke();
-    X.strokeStyle = dk ? "rgba(74,92,82,.55)" : "rgba(216,203,172,.8)"; X.lineWidth = 26;
-    X.beginPath(); X.moveTo(p1[0], p1[1]); X.lineTo(p2[0], p2[1]); X.stroke();
-  });
 }
 
 /* الأرض ثابتة لا تتغيّر — تُرسم مرّة واحدة لكل ثيم وتُنسخ كصورة كل إطار.
@@ -1054,7 +1209,7 @@ function MonthBar({ start, setStart, sub }) {
   return (
     <div style={S.mBar}>
       <button style={S.mArrow} aria-label="الشهر السابق"
-        onClick={() => setStart(shiftMonth(start, -1))}>›</button>
+        onClick={() => setStart(shiftMonth(start, -1))}><Chevron dir="right" /></button>
       <div style={{ textAlign: "center", minWidth: 0 }}>
         <div style={S.mName}>{hMonthLabel(start)}</div>
         <div style={S.mSub}>
@@ -1062,7 +1217,7 @@ function MonthBar({ start, setStart, sub }) {
         </div>
       </div>
       <button style={{ ...S.mArrow, ...(atNow ? S.mArrowOff : {}) }} disabled={atNow}
-        aria-label="الشهر التالي" onClick={() => setStart(shiftMonth(start, 1))}>‹</button>
+        aria-label="الشهر التالي" onClick={() => setStart(shiftMonth(start, 1))}><Chevron dir="left" /></button>
     </div>
   );
 }
@@ -1077,8 +1232,9 @@ export function Recorder({ st, onSave }) {
   const [sec, setSec] = useState(0);
   const [info, setInfo] = useState(null);
   const [quick, setQuick] = useState(false);
+  const [ask, setAsk] = useState(null);        /* سنّة سريعة تنتظر تأكيدك */
   const { day, dayKey, setDayKey, start, setStart, days, isFuture,
-          hit, isDone, dayGems, monthGems, doneCount, dayScore } = st;
+          hit, setTime, isDone, dayGems, monthGems, doneCount, dayScore } = st;
 
   const secIdx = Math.min(sec, Math.max(0, SUNAN.length - 1));
   const S0 = SUNAN[secIdx] || { id: "-", t: "", items: [] };
@@ -1183,20 +1339,20 @@ export function Recorder({ st, onSave }) {
           return (
             <div key={i.k} onClick={() => hit(i.k)}
               style={{ ...S.sq, ...(full ? { borderColor: i.c } : part ? { borderColor: i.c + "66" } : {}) }}>
-              {i.type === "cycle" && (
-                <div style={{ ...S.sqB, borderColor: i.c, color: full ? "#fff" : i.c,
-                  ...(full ? { background: i.c } : {}) }}>{ar(v)}/{ar(i.max)}</div>
-              )}
-              {full && <div style={{ ...S.sqD, background: i.c }}>✓</div>}
               <button style={S.sqI} aria-label={`فضل ${i.n}`}
-                onClick={(e) => { e.stopPropagation(); setInfo(i); }}>؟</button>
+                onClick={(e) => { e.stopPropagation(); setInfo(i); }}><QMark /></button>
+              {full && <div style={{ ...S.sqD, background: i.c }}>✓</div>}
               <div style={{ ...S.sqIc, background: full ? i.c : i.c + "1A" }}>
                 <svg viewBox="0 0 24 24" fill="none" strokeWidth="2"
                   strokeLinecap="round" strokeLinejoin="round"
-                  style={{ width: 22, height: 22, stroke: full ? "#fff" : i.c }}
+                  style={{ width: 21, height: 21, stroke: full ? "#fff" : i.c }}
                   dangerouslySetInnerHTML={{ __html: svg(i.ic) }} />
               </div>
               <div style={S.sqN}>{i.n}</div>
+              {i.type === "cycle" && (
+                <div style={{ ...S.sqCount, borderColor: i.c, color: full ? "#fff" : i.c,
+                  background: full ? i.c : i.c + "16" }}>{ar(v)}/{ar(i.max)}</div>
+              )}
             </div>
           );
         })}
@@ -1246,7 +1402,7 @@ export function Recorder({ st, onSave }) {
             <div style={S.qIc}><BoltIcon white /></div>
             <div>
               <div style={{ fontSize: 15, fontWeight: 700 }}>سنن سريعة</div>
-              <div style={S.lbl}>تُنجزها في دقائق — ابدأ بواحدة</div>
+              <div style={S.lbl}>اضغط سنّة ونؤكّد معك قبل تسجيلها</div>
             </div>
           </div>
           <div style={{ marginTop: 14 }}>
@@ -1255,7 +1411,7 @@ export function Recorder({ st, onSave }) {
             ).map((i) => {
               const done = isDone(i, day[i.k] || 0);
               return (
-                <div key={i.k} onClick={() => !done && hit(i.k)}
+                <div key={i.k} onClick={() => setAsk(i)}
                   style={{ ...S.qRow, ...(done ? { borderColor: i.c } : {}) }}>
                   <div style={{ ...S.qRowIc, background: done ? i.c : i.c + "1A" }}>
                     <svg viewBox="0 0 24 24" fill="none" strokeWidth="2"
@@ -1275,19 +1431,54 @@ export function Recorder({ st, onSave }) {
           <button style={S.dlgX} onClick={() => setQuick(false)}>إغلاق</button>
         </Overlay>
       )}
+
+      {/* تأكيد تسجيل السنّة السريعة أو إلغائه */}
+      {ask && (() => {
+        const done = isDone(ask, day[ask.k] || 0);
+        return (
+          <Overlay onClose={() => setAsk(null)} z={90}>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ ...S.dlgIc, background: done ? "var(--sp-mut)" : ask.c }}>
+                <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" stroke="#fff"
+                  strokeLinecap="round" strokeLinejoin="round" style={{ width: 27, height: 27 }}
+                  dangerouslySetInnerHTML={{ __html: svg(ask.ic) }} />
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 700 }}>{ask.n}</div>
+              <div style={S.dlgH}>
+                {done
+                  ? "أتلغي تسجيلها اليوم؟ تُخصم جواهرها وترجع كما كانت."
+                  : ask.type === "cycle"
+                    ? `أتسجّل مرّةً منها اليوم؟ تُحسب لك ${ar(ask.g)} جوهرة.`
+                    : `أتسجّلها اليوم؟ تُحسب لك ${ar(ask.g)} جوهرة.`}
+              </div>
+              <div style={{ display: "flex", gap: 9, marginTop: 16 }}>
+                <button style={S.navBtn} onClick={() => setAsk(null)}>تراجع</button>
+                {done ? (
+                  <button style={{ ...S.navBtn, ...S.navDanger }}
+                    onClick={() => { setTime(ask.k, 0); setAsk(null); }}>نعم، ألغِ</button>
+                ) : (
+                  <button style={{ ...S.navBtn, ...S.navPri }}
+                    onClick={() => { hit(ask.k); setAsk(null); }}>نعم، سجّلها</button>
+                )}
+              </div>
+            </div>
+          </Overlay>
+        );
+      })()}
     </div>
   );
 }
 
 /* ════════ مكوّنات مساعدة ════════ */
-function Overlay({ children, onClose, wide }) {
+function Overlay({ children, onClose, wide, z }) {
   useEffect(() => {
     const esc = (e) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", esc);
     return () => window.removeEventListener("keydown", esc);
   }, [onClose]);
   return (
-    <div style={S.ov} onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div style={{ ...S.ov, ...(z ? { zIndex: z } : {}) }}
+      onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div style={{ ...S.dlg, ...(wide ? { maxWidth: 390, textAlign: "right" } : {}) }}>{children}</div>
     </div>
   );
@@ -1301,6 +1492,20 @@ const Logo = () => (
     <path d="M14 35h16" stroke="var(--sp-mint)" strokeWidth="1.7" strokeLinecap="round" />
     <path d="M22 19l1.4 3.2 3.4.3-2.6 2.2.8 3.3L22 26.3l-3 1.7.8-3.3-2.6-2.2 3.4-.3z"
       fill="var(--sp-goldL)" opacity=".9" />
+  </svg>
+);
+/* سهم مرسوم لا حرفًا — الحروف ‹ › ؟ يعكسها اتجاه RTL فتنقلب */
+const Chevron = ({ dir }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
+    strokeLinecap="round" strokeLinejoin="round" style={{ width: 17, height: 17 }}>
+    <path d={dir === "right" ? "M9 5l7 7-7 7" : "M15 5l-7 7 7 7"} />
+  </svg>
+);
+const QMark = ({ size }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"
+    strokeLinecap="round" strokeLinejoin="round"
+    style={{ width: size || 12, height: size || 12 }}>
+    <path d="M9.1 9.2a3 3 0 0 1 5.8 1c0 2-2.9 2.6-2.9 4.3" /><path d="M12 18.2h.01" />
   </svg>
 );
 const EyeIcon = () => (
@@ -1933,18 +2138,20 @@ const S = {
         borderWidth: 1.5, borderStyle: "solid", borderColor: "var(--sp-line)",
         borderRadius: 17, padding: "9px 6px",
         display: "flex", flexDirection: "column", alignItems: "center",
-        justifyContent: "center", gap: 5, cursor: "pointer", boxShadow: "var(--sp-sh)" },
-  sqIc: { width: 44, height: 44, borderRadius: 12, display: "flex",
+        justifyContent: "center", gap: 4, cursor: "pointer", boxShadow: "var(--sp-sh)" },
+  sqIc: { width: 42, height: 42, borderRadius: 12, display: "flex", flexShrink: 0,
           alignItems: "center", justifyContent: "center", transition: "all .25s" },
   sqN: { fontSize: 9.5, fontWeight: 600, lineHeight: 1.25, textAlign: "center" },
-  sqB: { position: "absolute", top: 6, right: 6, minWidth: 22, height: 20, padding: "0 5px",
-         borderRadius: 10, background: "var(--sp-surf)", border: "1.5px solid",
-         fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" },
-  sqI: { position: "absolute", top: 6, left: 6, width: 19, height: 19, borderRadius: "50%",
-         border: "1px solid var(--sp-line)", background: "var(--sp-bg)", color: "var(--sp-mut)",
-         fontSize: 9.5, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" },
-  sqD: { position: "absolute", bottom: 6, right: 6, width: 16, height: 16, borderRadius: "50%",
-         color: "#fff", fontSize: 9, display: "flex", alignItems: "center", justifyContent: "center" },
+  /* العدّاد في وسط الكرت تحت اسم السنّة */
+  sqCount: { minWidth: 34, padding: "2px 8px", borderRadius: 9,
+             borderWidth: 1.2, borderStyle: "solid", fontSize: 10.5, fontWeight: 700,
+             lineHeight: 1.5, letterSpacing: .3 },
+  sqI: { position: "absolute", top: 6, left: 6, width: 20, height: 20, borderRadius: "50%",
+         borderWidth: 1, borderStyle: "solid", borderColor: "var(--sp-line)",
+         background: "var(--sp-bg)", color: "var(--sp-mut)", padding: 0,
+         display: "flex", alignItems: "center", justifyContent: "center" },
+  sqD: { position: "absolute", top: 6, right: 6, width: 17, height: 17, borderRadius: "50%",
+         color: "#fff", fontSize: 9.5, display: "flex", alignItems: "center", justifyContent: "center" },
   navRow: { display: "flex", gap: 9, marginBottom: 13 },
   navBtn: { flex: 1, borderWidth: 1, borderStyle: "solid", borderColor: "var(--sp-line)",
             background: "var(--sp-surf)",
