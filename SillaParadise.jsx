@@ -32,6 +32,18 @@ const PAD = 52;                        // شريط السور حول الأرض
 const IN = { x: PAD, y: PAD, w: W - PAD * 2, h: H - PAD * 2 };
 const ZOOM = 0.44;                     // تكبير ثابت — الجنّة مصغّرة دائمًا
 
+/* ════════ الإسقاط الإيزومتري ════════
+   الأرض تُدار ٤٥° وتُضغط رأسيًا للنصف، فتصير مربّعاتها معيّنات ويظهر العمق.
+   ما يستلقي على الأرض (الصحن، القنوات، النهر) يُرسم بالتحويل نفسه،
+   وما يقف عليها (الأبنية، الأشجار، اللاعب) يُرسم منتصبًا عند موضعه المُسقَط —
+   وهذا هو أصل الإيزومتري: أرضٌ مائلة وأجسامٌ قائمة.
+   المعامل مختار ليملأ المعيّنُ عرض الأرض تمامًا ويبقى فوقه فسحة لارتفاعات البناء. */
+const IK = 0.565;                       /* (١٠٨٠+٨٣٠)×IK = عرض الأرض */
+const IZ = 0.62;                        /* الضغط الرأسي — أقلّ من ٢:١ فيملأ المعيّن اللوحة */
+const IOX = 469, IOY = 118;             /* ١١٨ فسحة علوية لأعلى بناء (المئذنة ٩٢) */
+export const IX = (x, y) => (x - y) * IK + IOX;
+export const IY = (x, y) => (x + y) * IK * IZ + IOY;
+
 export const ar = (n) => String(n).replace(/[0-9]/g, (d) => "٠١٢٣٤٥٦٧٨٩"[+d]);
 export const fmt = (n) => ar(Math.round(n).toLocaleString("en-US"));
 
@@ -461,6 +473,53 @@ function shadow(x, y, w, h, op) {
     X.beginPath(); X.ellipse(x + w * 0.18, y + 2, w * (1 + i * 0.13), h * (1 + i * 0.13), 0, 0, 7); X.fill();
   }
 }
+/* صندوق إيزومتري: قاعدته مربّع في فضاء الأرض، وله سطح ووجهان مضاءان
+   إضاءةً مختلفة — وهذا ما يعطي الحجم. (wx,wy) مركز القاعدة في فضاء الأرض. */
+function isoBox(wx, wy, sx, sy, h, cTop, cR, cL, lift) {
+  const L = lift || 0;
+  const N = [IX(wx - sx, wy - sy), IY(wx - sx, wy - sy) - L];
+  const E = [IX(wx + sx, wy - sy), IY(wx + sx, wy - sy) - L];
+  const S = [IX(wx + sx, wy + sy), IY(wx + sx, wy + sy) - L];
+  const Wc = [IX(wx - sx, wy + sy), IY(wx - sx, wy + sy) - L];
+  const up = (q) => [q[0], q[1] - h];
+  const face = (pts, c) => {
+    X.fillStyle = c; X.beginPath();
+    pts.forEach((q, i) => (i ? X.lineTo(q[0], q[1]) : X.moveTo(q[0], q[1])));
+    X.closePath(); X.fill();
+  };
+  if (!L) {
+    X.fillStyle = "rgba(20,35,30,.20)";
+    X.beginPath();
+    [N, E, S, Wc].forEach((q, i) => (i ? X.lineTo(q[0], q[1] + 3) : X.moveTo(q[0], q[1] + 3)));
+    X.closePath(); X.fill();
+  }
+  face([E, S, up(S), up(E)], cR);          /* الوجه الشرقيّ — أفتح */
+  face([S, Wc, up(Wc), up(S)], cL);        /* الغربيّ — أغمق */
+  face([up(N), up(E), up(S), up(Wc)], cTop);
+  X.strokeStyle = "rgba(0,0,0,.13)"; X.lineWidth = 1;
+  X.beginPath(); X.moveTo(S[0], S[1]); X.lineTo(up(S)[0], up(S)[1]); X.stroke();
+}
+
+/* دار إيزومترية: جدران صندوقية وفوقها سقف جملونيّ عارضته على محور الأرض السينيّ */
+function isoHouse(wx, wy, sx, sy, hw, hr, C) {
+  isoBox(wx, wy, sx, sy, hw, C.wallTop, C.wallR, C.wallL);
+  const P4 = (a, b) => [IX(a, b), IY(a, b) - hw];
+  const N = P4(wx - sx, wy - sy), E = P4(wx + sx, wy - sy);
+  const S = P4(wx + sx, wy + sy), Wc = P4(wx - sx, wy + sy);
+  const R1 = P4(wx - sx, wy), R2 = P4(wx + sx, wy);
+  R1[1] -= hr; R2[1] -= hr;
+  const face = (pts, c) => {
+    X.fillStyle = c; X.beginPath();
+    pts.forEach((q, i) => (i ? X.lineTo(q[0], q[1]) : X.moveTo(q[0], q[1])));
+    X.closePath(); X.fill();
+  };
+  face([N, E, R2, R1], C.roofBack);                 /* الميل الخلفيّ */
+  face([N, Wc, R1], C.gable);                       /* جملون غربيّ */
+  face([Wc, S, R2, R1], C.roofFront);               /* الميل الأماميّ */
+  face([E, S, R2], C.gable);                        /* جملون شرقيّ */
+  return { N, E, S, Wc, R1, R2 };
+}
+
 function lit(x, y, w, c1, c2) {
   const g = X.createLinearGradient(x - w / 2, y, x + w / 2, y);
   g.addColorStop(0, c1); g.addColorStop(1, c2); return g;
@@ -478,33 +537,37 @@ export const DRAW={};
 /* ── السور: طاردات الشيطان (٣٠ قطعة على المحيط) ── */
 DRAW.fort=(x,y,n)=>{
  const k=Math.min(n,30);
- for(let i=0;i<k;i++){const[a,b,o]=WALL[i];
-  const w=o==='h'?62:34,h=o==='h'?34:62;
-  shadow(a,b+h/2-4,w*.42,7,.18);
-  X.fillStyle=lit(a,b,w,DK()?'#7E948C':'#C0CCC0',DK()?'#3E5A54':'#8A9C90');
-  X.fillRect(a-w/2,b-h/2,w,h);
-  X.strokeStyle='rgba(0,0,0,.1)';X.lineWidth=1;
-  for(let r=1;r<3;r++){X.beginPath();
-   if(o==='h'){X.moveTo(a-w/2,b-h/2+r*11);X.lineTo(a+w/2,b-h/2+r*11)}
-   else{X.moveTo(a-w/2+r*11,b-h/2);X.lineTo(a-w/2+r*11,b+h/2)}X.stroke()}
-  X.fillStyle=DK()?'#94AAA2':'#D4DED4';
-  if(o==='h')for(let j=0;j<3;j++)X.fillRect(a-w/2+4+j*20,b-h/2-8,12,8);
-  else for(let j=0;j<3;j++)X.fillRect(a+w/2,b-h/2+4+j*20,8,12);
-  X.fillStyle='rgba(255,255,255,.15)';
-  if(o==='h')X.fillRect(a-w/2,b-h/2,w,4);else X.fillRect(a-w/2,b-h/2,4,h)}};
+ /* تُرتَّب بالعمق فتحجب القطعُ القريبة ما خلفها */
+ const seg=[];
+ for(let i=0;i<k;i++){const[a,b,o]=WALL[i];seg.push({a,b,o,d:a+b})}
+ seg.sort((p,q)=>p.d-q.d);
+ /* حجر كلسيّ كحجر الصحن — لا رمادي يخالفه */
+ const top=DK()?'#4E5A50':'#E8DEC7',rgt=DK()?'#3A4740':'#CFC1A2',lft=DK()?'#28332E':'#AC9E80';
+ seg.forEach(({a,b,o})=>{
+  const sx=o==='h'?30:16,sy=o==='h'?16:30;
+  isoBox(a,b,sx,sy,26,top,rgt,lft);                    /* بدن البرج */
+  isoBox(a,b,sx*1.12,sy*1.12,5,DK()?'#5C6A5E':'#F2EADA',rgt,lft,26);  /* شرفة تعلوه */
+ })};
 
 /* ── بيوت الرواتب: حيّ يصل ٣٠ بيتًا ── */
 DRAW.house=(x,y,n)=>{const k=Math.min(n,30);
+ /* الشبكة في فضاء الأرض لا الشاشة، فتُسقَط صفوفًا مائلة كحيٍّ حقيقي.
+    (x,y) الواصلان مُسقَطان أصلًا، فنستعيد مركز الحيّ من موضعه في SPOT. */
+ const [hx,hy]=SPOT.house;
+ const col={wallTop:DK()?'#CDBE92':'#F6EDD8',wallR:DK()?'#B5A57C':'#E4D7BB',
+            wallL:DK()?'#8C7C58':'#C2B291',
+            roofBack:DK()?'#8E6438':'#B98A52',roofFront:DK()?'#C08A50':'#DBA968',
+            gable:DK()?'#7E5A32':'#A87B47'};
+ const cells=[];
  for(let i=0;i<k;i++){const c=i%6,r=Math.floor(i/6);
- const a=x+c*44-110,b=y+r*36-54;shadow(a,b,16,5);
- X.fillStyle=lit(a,b,26,DK()?'#D6C79A':'#F2E7CE',DK()?'#9E8E67':'#C4B394');
- X.fillRect(a-13,b-17,26,17);
- const rg=X.createLinearGradient(a-17,b-30,a+17,b-17);
- rg.addColorStop(0,DK()?'#C08A50':'#DBA968');rg.addColorStop(1,DK()?'#7E5A32':'#A87B47');
- X.fillStyle=rg;X.beginPath();X.moveTo(a-17,b-17);X.lineTo(a,b-30);X.lineTo(a+17,b-17);X.fill();
- X.fillStyle='rgba(0,0,0,.13)';X.beginPath();X.moveTo(a,b-30);X.lineTo(a+17,b-17);X.lineTo(a+5,b-17);X.fill();
- X.fillStyle=DK()?'#5E4530':'#7A5A3A';X.fillRect(a-4,b-10,8,10);
- X.fillStyle='#FFEBAE';X.fillRect(a-10,b-14,5,5);X.fillRect(a+5,b-14,5,5)}};
+  cells.push({a:hx+(c-2.5)*48,b:hy+(r-2.5)*44})}
+ cells.sort((p,q)=>(p.a+p.b)-(q.a+q.b));
+ cells.forEach(({a,b})=>{
+  isoHouse(a,b,17,15,19,14,col);
+  /* باب ونافذتان على الوجه الأمامي */
+  const fx=IX(a,b+15),fy=IY(a,b+15);
+  X.fillStyle=DK()?'#5E4530':'#7A5A3A';X.fillRect(fx-4,fy-14,8,13);
+  X.fillStyle='#FFEBAE';X.fillRect(fx-14,fy-17,6,6);X.fillRect(fx+8,fy-17,6,6)})};
 
 /* ── المحراب: يعلو ويتعدّد ── */
 DRAW.mihrab=(x,y,n)=>{const k=Math.min(Math.ceil(n/6),5);
@@ -546,7 +609,10 @@ DRAW.rug=(x,y,n)=>{if(!n)return;const s=.5+Math.min(n,30)/30*1.6;
    فيظهر الماء من اليوم الأول ويمتلئ المجرى كاملًا يوم ٣٠.
    ⚠ الفهارس مقيّدة داخل حدود المصفوفة — انظر §١٣ في CLAUDE.md. */
 DRAW.stream=(x,y,n)=>{
- const pts=[];for(let i=0;i<=10;i++)pts.push([IN.x+30+i*(IN.w-60)/10,y+Math.sin(i*.75)*22]);
+ /* y هنا مُسقَط أصلًا، فنعيد بناء المسار في فضاء الأرض ثم نُسقطه */
+ const wy=357,pts=[];
+ for(let i=0;i<=10;i++){const wx=IN.x+30+i*(IN.w-60)/10,wv=wy+Math.sin(i*.75)*22;
+  pts.push([IX(wx,wv),IY(wx,wv)])}
  /* مجرى جافّ */
  X.strokeStyle=DK()?'rgba(70,64,48,.6)':'rgba(190,178,148,.75)';X.lineWidth=30;X.lineCap='round';
  X.beginPath();X.moveTo(pts[0][0],pts[0][1]);pts.forEach(p=>X.lineTo(p[0],p[1]));X.stroke();
@@ -667,15 +733,17 @@ DRAW.arak=(x,y,n)=>{const k=Math.min(Math.ceil(n/3),10);
   cg.addColorStop(0,DK()?'#4FB37C':'#6FD49A');cg.addColorStop(1,DK()?'#1E6B42':'#3A8A5A');
   X.fillStyle=cg;X.beginPath();X.arc(a+ox*s,b+oy*s,r*s,0,7);X.fill()})}};
 
-DRAW.bighouse=(x,y,n)=>{if(!n)return;const s=.62+Math.min(n,30)/30*.45;shadow(x,y,38*s,11*s);
- X.fillStyle=lit(x,y,74*s,DK()?'#DCCDA0':'#F5EBD4',DK()?'#A0906A':'#C6B494');
- X.fillRect(x-37*s,y-44*s,74*s,44*s);
- const rg=X.createLinearGradient(x-46*s,y-68*s,x+46*s,y-44*s);
- rg.addColorStop(0,DK()?'#C08A50':'#DBA968');rg.addColorStop(1,DK()?'#7E5A32':'#A87B47');
- X.fillStyle=rg;X.beginPath();X.moveTo(x-46*s,y-44*s);X.lineTo(x,y-68*s);X.lineTo(x+46*s,y-44*s);X.fill();
- X.fillStyle='rgba(0,0,0,.14)';X.beginPath();X.moveTo(x,y-68*s);X.lineTo(x+46*s,y-44*s);X.lineTo(x+13*s,y-44*s);X.fill();
- X.fillStyle='#FFEBAE';[[-26,-36],[-6,-36],[14,-36]].forEach(([p,q])=>X.fillRect(x+p*s,y+q*s,12*s,10*s));
- X.fillStyle=DK()?'#5E4530':'#7A5A3A';X.fillRect(x-9*s,y-21*s,18*s,21*s)};
+DRAW.bighouse=(x,y,n)=>{if(!n)return;const s=.62+Math.min(n,30)/30*.45;
+ const [bx,by]=SPOT.bighouse;
+ const col={wallTop:DK()?'#D8C99C':'#F8F0DC',wallR:DK()?'#BFAF84':'#E8DCC0',
+            wallL:DK()?'#96865F':'#CCBC9A',
+            roofBack:DK()?'#8E6438':'#B98A52',roofFront:DK()?'#C08A50':'#DBA968',
+            gable:DK()?'#7E5A32':'#A87B47'};
+ isoHouse(bx,by,32*s,26*s,34*s,22*s,col);
+ const fx=IX(bx,by+26*s),fy=IY(bx,by+26*s);
+ X.fillStyle=DK()?'#5E4530':'#7A5A3A';X.fillRect(fx-8*s,fy-24*s,16*s,23*s);
+ X.fillStyle='#FFEBAE';
+ X.fillRect(fx-26*s,fy-28*s,9*s,8*s);X.fillRect(fx+17*s,fy-28*s,9*s,8*s)};
 
 DRAW.bridge=(x,y,n)=>{if(!n)return;const s=.7+Math.min(n,30)/30*.4;
  shadow(x,y+6,38*s,7*s,.14);
@@ -784,11 +852,12 @@ DRAW.shieldL=(x,y,n)=>{if(!n)return;const s=.6+Math.min(n,30)/30*.55;X.save();
 DRAW.fence=(x,y,n)=>{if(!n)return;const k=Math.min(n,30);X.save();
  X.globalAlpha=.22+Math.min(k,30)/30*.18+Math.sin(ph*1.2)*.06;
  X.strokeStyle=DK()?'#8FD3C8':'#6BBFB2';X.lineWidth=2.4;X.lineCap='round';
- const per=[],x0=IN.x+8,y0=IN.y+8,x1=IN.x+IN.w-8,y1=IN.y+IN.h-8;
- for(let i=0;i<10;i++)per.push([x0+(x1-x0)*i/9,y0]);
- for(let i=1;i<6;i++)per.push([x1,y0+(y1-y0)*i/5]);
- for(let i=8;i>=0;i--)per.push([x0+(x1-x0)*i/9,y1]);
- for(let i=4;i>=1;i--)per.push([x0,y0+(y1-y0)*i/5]);
+ const raw=[],x0=IN.x+8,y0=IN.y+8,x1=IN.x+IN.w-8,y1=IN.y+IN.h-8;
+ for(let i=0;i<10;i++)raw.push([x0+(x1-x0)*i/9,y0]);
+ for(let i=1;i<6;i++)raw.push([x1,y0+(y1-y0)*i/5]);
+ for(let i=8;i>=0;i--)raw.push([x0+(x1-x0)*i/9,y1]);
+ for(let i=4;i>=1;i--)raw.push([x0,y0+(y1-y0)*i/5]);
+ const per=raw.map(([a,b])=>[IX(a,b),IY(a,b)]);
  const show=Math.min(per.length,Math.round(per.length*k/30));
  for(let i=0;i<show;i++){const[a,b]=per[i];
   X.beginPath();X.moveTo(a,b);X.lineTo(a,b-18);X.stroke();
@@ -970,13 +1039,17 @@ function birka(cx, cy, r) {
 function ground() {
   const dk = DK(), p = pal();
 
-  /* خارج الحدود — أرض قاحلة */
+  /* خارج الحدود — أرض قاحلة تملأ اللوحة، فتُرسم قبل التحويل */
+  X.setTransform(1, 0, 0, 1, 0, 0);
   X.fillStyle = p.sand; X.fillRect(0, 0, W, H);
   for (let i = 0; i < 200; i++) {
     X.globalAlpha = 0.06; X.fillStyle = p.sandDot;
     X.beginPath(); X.arc((i * 173) % W, (i * 281) % H, 4 + ((i * 7) % 9), 0, 7); X.fill();
   }
   X.globalAlpha = 1;
+
+  /* من هنا: كل ما يستلقي على الأرض يُسقَط إيزومتريًا */
+  X.setTransform(IK, IK * IZ, -IK, IK * IZ, IOX, IOY);
 
   /* داخل الحدود — أرض الجنّة */
   const g = X.createRadialGradient(535, 420, 60, 535, 420, IN.w * .72);
@@ -1023,6 +1096,8 @@ function ground() {
   X.save(); X.setLineDash([9, 7]); X.lineWidth = 2.4;
   X.strokeStyle = dk ? "rgba(212,181,112,.42)" : "rgba(185,148,66,.5)";
   X.strokeRect(IN.x - 14, IN.y - 14, IN.w + 28, IN.h + 28); X.restore();
+
+  X.setTransform(1, 0, 0, 1, 0, 0);
 }
 
 /* الأرض ثابتة لا تتغيّر — تُرسم مرّة واحدة لكل ثيم وتُنسخ كصورة كل إطار.
@@ -1038,7 +1113,8 @@ function groundLayer() {
   return c;
 }
 
-function drawPlayer(P) {
+function drawPlayer(src, px, py) {
+  const P = { f: src.f, mv: src.mv, x: px, y: py };
   const b = Math.sin(P.f * .24) * 2 * (P.mv ? 1 : 0);
   shadow(P.x, P.y + 2, 10, 4, .26);
   const g = X.createLinearGradient(P.x - 10, 0, P.x + 10, 0);
@@ -1144,8 +1220,10 @@ export function Village({ st, theme = "light" }) {
       const d = dpr.current;
       const cw = cv.width / d, ch = cv.height / d;      /* بكسلات CSS */
       const vw = cw / ZOOM, vh = ch / ZOOM;             /* ما يُرى من الأرض */
-      cam.current.x += (P.current.x - cam.current.x) * .11;
-      cam.current.y += (P.current.y - cam.current.y) * .11;
+      /* الكاميرا تتبع اللاعب في فضاء الشاشة المُسقَط لا في فضاء الأرض */
+      const pjx = IX(P.current.x, P.current.y), pjy = IY(P.current.x, P.current.y);
+      cam.current.x += (pjx - cam.current.x) * .11;
+      cam.current.y += (pjy - cam.current.y) * .11;
       const cx = Math.max(Math.min(vw, W) / 2, Math.min(W - Math.min(vw, W) / 2, cam.current.x));
       const cy = Math.max(Math.min(vh, H) / 2, Math.min(H - Math.min(vh, H) / 2, cam.current.y));
       X.setTransform(ZOOM * d, 0, 0, ZOOM * d, 0, 0);
@@ -1155,22 +1233,23 @@ export function Village({ st, theme = "light" }) {
       X.drawImage(groundLayer(), 0, 0);
       BACK.forEach((nm) => {
         const it = ITEMS.find((i) => i.i === nm); if (!it) return;
-        const [a, b] = SPOT[nm]; DRAW[nm](a, b, t[it.k] || 0);
+        const [a, b] = SPOT[nm]; DRAW[nm](IX(a, b), IY(a, b), t[it.k] || 0);
       });
       const objs = [];
       SORTED.forEach((nm) => {
         const it = ITEMS.find((i) => i.i === nm); if (!it) return;
         const n = t[it.k] || 0; if (!n) return;
         const [a, b] = SPOT[nm];
-        objs.push({ y: b, f: () => DRAW[nm](a, b, n) });
+        /* العمق في الإيزومتري = س+ص، وهو نفسه إحداثي الشاشة الرأسي */
+        objs.push({ y: IY(a, b), f: () => DRAW[nm](IX(a, b), IY(a, b), n) });
       });
-      objs.push({ y: P.current.y, f: () => drawPlayer(P.current) });
+      objs.push({ y: pjy, f: () => drawPlayer(P.current, pjx, pjy) });
       objs.sort((m, n) => m.y - n.y).forEach((o) => o.f());
       X.setTransform(d, 0, 0, d, 0, 0);
       /* عمق جوّي */
       const vg = X.createRadialGradient(cw / 2, ch / 2, ch * .32, cw / 2, ch / 2, ch * .95);
       vg.addColorStop(0, "rgba(0,0,0,0)");
-      vg.addColorStop(1, DK() ? "rgba(6,20,18,.5)" : "rgba(40,70,55,.26)");
+      vg.addColorStop(1, DK() ? "rgba(6,20,18,.34)" : "rgba(60,80,64,.15)");
       X.fillStyle = vg; X.fillRect(0, 0, cw, ch);
       /* أقرب بناء */
       let best = null, nd = 1e9;
