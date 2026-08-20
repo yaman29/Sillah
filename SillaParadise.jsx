@@ -248,6 +248,75 @@ export function useSunanVersion() {
   return useSyncExternalStore(subSunan, getVer, getVer);
 }
 
+/* ════════ الأصوات ════════
+   مولّدة بـ Web Audio لا ملفات — الصفحة المنشورة تمنع أي مضيف خارجي،
+   والنغمة المولّدة بضع مئات البايتات من الكود بدل مئات الكيلوبايتات.
+   سياسة المتصفّحات تمنع الصوت قبل لمسة المستخدم، فالسياق يُنشأ عند أول لمسة. */
+
+export const LS_SOUND = "silla.sound.v1";
+const AUD = { ctx: null, master: null, on: true };
+let soundVer = 0;
+const soundSubs = new Set();
+
+export const soundOn = () => AUD.on;
+export function setSound(on) {
+  AUD.on = !!on;
+  if (AUD.master) AUD.master.gain.value = AUD.on ? 1 : 0;
+  try { window.localStorage.setItem(LS_SOUND, AUD.on ? "1" : "0"); } catch (e) { /* تجاهل */ }
+  soundVer++; soundSubs.forEach((f) => f());
+}
+export function hydrateSound() {
+  try { if (window.localStorage.getItem(LS_SOUND) === "0") setSound(false); } catch (e) { /* تجاهل */ }
+}
+export function useSound() {
+  return useSyncExternalStore(
+    (f) => { soundSubs.add(f); return () => soundSubs.delete(f); },
+    () => soundVer, () => soundVer);
+}
+
+function actx() {
+  if (AUD.ctx) { if (AUD.ctx.state === "suspended") AUD.ctx.resume(); return AUD.ctx; }
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return null;
+  AUD.ctx = new AC();
+  AUD.master = AUD.ctx.createGain();
+  AUD.master.gain.value = AUD.on ? 1 : 0;
+  AUD.master.connect(AUD.ctx.destination);
+  return AUD.ctx;
+}
+
+/* نغمة واحدة: تردّد يبدأ من f وينزلق إلى to، بغلافٍ سريع لا يطقطق */
+function tone(f, { to, dur = .1, type = "sine", vol = .16, at = 0 } = {}) {
+  const c = actx(); if (!c || !AUD.on) return;
+  const t = c.currentTime + at;
+  const o = c.createOscillator(), g = c.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(f, t);
+  if (to) o.frequency.exponentialRampToValueAtTime(to, t + dur);
+  g.gain.setValueAtTime(.0001, t);
+  g.gain.exponentialRampToValueAtTime(vol, t + .014);
+  g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  o.connect(g); g.connect(AUD.master);
+  o.start(t); o.stop(t + dur + .03);
+}
+
+/* سلّم المقام — نغمات متآلفة لا نشاز */
+const N = { do:523.25, re:587.33, mi:659.25, sol:784, la:880, do2:1046.5, mi2:1318.5 };
+
+export const SFX = {
+  tap:   () => tone(N.re, { dur: .07, vol: .1, type: "triangle" }),
+  step:  () => { tone(N.mi, { dur: .08, vol: .12, type: "triangle" }); },
+  done:  () => { tone(N.sol, { dur: .12, vol: .15, type: "triangle" });
+                 tone(N.do2, { dur: .18, vol: .13, type: "triangle", at: .09 }); },
+  gem:   () => { tone(N.do2, { dur: .09, vol: .1, type: "sine" });
+                 tone(N.mi2, { dur: .13, vol: .09, type: "sine", at: .07 }); },
+  undo:  () => { tone(N.mi, { to: N.do * .85, dur: .2, vol: .12, type: "sine" }); },
+  open:  () => tone(N.la, { dur: .1, vol: .09, type: "sine" }),
+  nav:   () => tone(N.do, { dur: .07, vol: .08, type: "sine" }),
+  save:  () => [N.do, N.mi, N.sol, N.do2].forEach((f, i) =>
+                 tone(f, { dur: .22, vol: .13, type: "triangle", at: i * .085 })),
+};
+
 /* ════════ التاريخ الهجري ════════ */
 export const HM = ["محرّم","صفر","ربيع الأول","ربيع الآخر","جمادى الأولى","جمادى الآخرة",
                    "رجب","شعبان","رمضان","شوّال","ذو القعدة","ذو الحجة"];
@@ -318,7 +387,13 @@ export function useSillaState(initialLog = {}) {
     setLog((L) => {
       const d = { ...(L[dayKey] || {}) };
       const b = d[k] || 0;
-      d[k] = i.type === "bool" ? (b ? 0 : 1) : b >= i.max ? 0 : b + 1;
+      const n = i.type === "bool" ? (b ? 0 : 1) : b >= i.max ? 0 : b + 1;
+      d[k] = n;
+      const wasDone = i.type === "cycle" ? b >= i.max : b > 0;
+      const nowDone = i.type === "cycle" ? n >= i.max : n > 0;
+      if (nowDone && !wasDone) SFX.done();
+      else if (!nowDone && wasDone) SFX.undo();
+      else SFX.step();
       return { ...L, [dayKey]: d };
     });
   }, [dayKey, sv]);
@@ -1210,7 +1285,7 @@ function MonthBar({ start, setStart, sub }) {
   return (
     <div style={S.mBar}>
       <button style={S.mArrow} aria-label="الشهر السابق"
-        onClick={() => setStart(shiftMonth(start, -1))}><Chevron dir="right" /></button>
+        onClick={() => { SFX.nav(); setStart(shiftMonth(start, -1)); }}><Chevron dir="right" /></button>
       <div style={{ textAlign: "center", minWidth: 0 }}>
         <div style={S.mName}>{hMonthLabel(start)}</div>
         <div style={S.mSub}>
@@ -1218,7 +1293,9 @@ function MonthBar({ start, setStart, sub }) {
         </div>
       </div>
       <button style={{ ...S.mArrow, ...(atNow ? S.mArrowOff : {}) }} disabled={atNow}
-        aria-label="الشهر التالي" onClick={() => setStart(shiftMonth(start, 1))}><Chevron dir="left" /></button>
+        aria-label="الشهر التالي"
+        onClick={() => { SFX.nav(); setStart(shiftMonth(start, 1)); }}><Chevron dir="left" /></button>
+      <SoundBtn />
     </div>
   );
 }
@@ -1240,6 +1317,21 @@ export function Recorder({ st, onSave }) {
   const secIdx = Math.min(sec, Math.max(0, SUNAN.length - 1));
   const S0 = SUNAN[secIdx] || { id: "-", t: "", items: [] };
   const stripRef = useRef(null);
+  const [pops, setPops] = useState([]);       /* جواهر تطير من الكرت المضغوط */
+  const popId = useRef(0);
+
+  /* لمسة على سنّة: سجّلها وأطلق جوهرتها */
+  const press = (i, e) => {
+    const v = day[i.k] || 0;
+    const wasDone = isDone(i, v);
+    hit(i.k);
+    if (wasDone && i.type === "bool") return;              /* إلغاء — لا جوهرة */
+    if (i.type === "cycle" && v >= i.max) return;
+    const box = e.currentTarget.getBoundingClientRect();
+    const id = ++popId.current;
+    setPops((L) => [...L, { id, g: i.g, c: i.c, x: box.left + box.width / 2, y: box.top + 14 }]);
+    setTimeout(() => setPops((L) => L.filter((q) => q.id !== id)), 900);
+  };
   const quickLeft = QUICK().filter((i) => !isDone(i, day[i.k] || 0)).length;
   const sel = fromIso(dayKey);
   const todayKey = iso(today());
@@ -1265,7 +1357,8 @@ export function Recorder({ st, onSave }) {
           const isToday = k === todayKey;
           const lvl = score >= 18 ? 3 : score >= 8 ? 2 : score > 0 ? 1 : 0;
           return (
-            <button key={k} data-day={k} disabled={future} onClick={() => setDayKey(k)}
+            <button key={k} data-day={k} disabled={future}
+              onClick={() => { SFX.tap(); setDayKey(k); }}
               style={{ ...S.dChip,
                 ...(lvl ? { background: lvl === 3 ? "var(--sp-aura)" : "var(--sp-mintBg)" } : {}),
                 ...(isToday && !on ? { borderColor: "var(--sp-mint)" } : {}),
@@ -1314,7 +1407,7 @@ export function Recorder({ st, onSave }) {
       </div>
 
       {/* سنن سريعة */}
-      <button style={S.quickB} onClick={() => setQuick(true)}>
+      <button style={S.quickB} onClick={() => { SFX.open(); setQuick(true); }}>
         <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <BoltIcon /> سنن سريعة
         </span>
@@ -1329,7 +1422,7 @@ export function Recorder({ st, onSave }) {
           const d = s.items.filter((it) => isDone(it, day[it.k] || 0)).length;
           const full = s.items.length > 0 && d === s.items.length;
           return (
-            <div key={s.id} onClick={() => setSec(i)}
+            <div key={s.id} onClick={() => { SFX.nav(); setSec(i); }}
               style={{ ...S.sTab, ...(i === secIdx ? S.sTabOn : {}), ...(full && i !== secIdx ? S.sTabDone : {}) }}>
               <div style={S.st}>{s.t}</div>
               <div style={S.sc}>{ar(d)}/{ar(s.items.length)}{full ? " ✓" : ""}</div>
@@ -1348,10 +1441,10 @@ export function Recorder({ st, onSave }) {
           const full = isDone(i, v);
           const part = i.type === "cycle" && v > 0 && v < i.max;
           return (
-            <div key={i.k} onClick={() => hit(i.k)}
+            <div key={i.k} className="sp-tap" onClick={(e) => press(i, e)}
               style={{ ...S.sq, ...(full ? { borderColor: i.c } : part ? { borderColor: i.c + "66" } : {}) }}>
               <button style={S.sqI} aria-label={`فضل ${i.n}`}
-                onClick={(e) => { e.stopPropagation(); setInfo(i); }}><QMark /></button>
+                onClick={(e) => { e.stopPropagation(); SFX.open(); setInfo(i); }}><QMark /></button>
               {full && <div style={{ ...S.sqD, background: i.c }}>✓</div>}
               <div style={{ ...S.sqIc, background: full ? i.c : i.c + "1A" }}>
                 <svg viewBox="0 0 24 24" fill="none" strokeWidth="2"
@@ -1362,7 +1455,7 @@ export function Recorder({ st, onSave }) {
               <div style={S.sqN}>{i.n}</div>
               {i.type === "cycle" && (
                 <div style={{ ...S.sqCount, borderColor: i.c, color: full ? "#fff" : i.c,
-                  background: full ? i.c : i.c + "16" }}>{ar(v)}/{ar(i.max)}</div>
+                  background: full ? i.c : i.c + "16" }}>{ar(i.max)}/{ar(v)}</div>
               )}
             </div>
           );
@@ -1370,14 +1463,15 @@ export function Recorder({ st, onSave }) {
       </div>
 
       <div style={S.navRow}>
-        <button style={S.navBtn} disabled={secIdx === 0} onClick={() => setSec(secIdx - 1)}>السابق</button>
+        <button style={S.navBtn} disabled={secIdx === 0}
+          onClick={() => { SFX.nav(); setSec(secIdx - 1); }}>السابق</button>
         <button style={{ ...S.navBtn, ...S.navPri }} disabled={secIdx >= SUNAN.length - 1}
-          onClick={() => setSec(secIdx + 1)}>
+          onClick={() => { SFX.nav(); setSec(secIdx + 1); }}>
           {secIdx >= SUNAN.length - 1 ? "تمّت كل الأقسام" : "القسم التالي ←"}
         </button>
       </div>
 
-      <button style={S.saveB} onClick={onSave}>حفظ وبناء جنّتك</button>
+      <button style={S.saveB} onClick={() => { SFX.save(); onSave(); }}>حفظ وبناء جنّتك</button>
 
       {/* نافذة الفضل */}
       {info && (
@@ -1422,7 +1516,7 @@ export function Recorder({ st, onSave }) {
             ).map((i) => {
               const done = isDone(i, day[i.k] || 0);
               return (
-                <div key={i.k} onClick={() => setAsk(i)}
+                <div key={i.k} onClick={() => { SFX.tap(); setAsk(i); }}
                   style={{ ...S.qRow, ...(done ? { borderColor: i.c } : {}) }}>
                   <div style={{ ...S.qRowIc, background: done ? i.c : i.c + "1A" }}>
                     <svg viewBox="0 0 24 24" fill="none" strokeWidth="2"
@@ -1442,6 +1536,13 @@ export function Recorder({ st, onSave }) {
           <button style={S.dlgX} onClick={() => setQuick(false)}>إغلاق</button>
         </Overlay>
       )}
+
+      {/* الجواهر تطير صاعدةً من الكرت */}
+      {pops.map((q) => (
+        <div key={q.id} className="sp-pop" style={{ ...S.pop, left: q.x, top: q.y, color: q.c }}>
+          {ar(q.g)} 💎
+        </div>
+      ))}
 
       {/* تأكيد تسجيل السنّة السريعة أو إلغائه */}
       {ask && (() => {
@@ -1466,7 +1567,7 @@ export function Recorder({ st, onSave }) {
                 <button style={S.navBtn} onClick={() => setAsk(null)}>تراجع</button>
                 {done ? (
                   <button style={{ ...S.navBtn, ...S.navDanger }}
-                    onClick={() => { setTime(ask.k, 0); setAsk(null); }}>نعم، ألغِ</button>
+                    onClick={() => { setTime(ask.k, 0); SFX.undo(); setAsk(null); }}>نعم، ألغِ</button>
                 ) : (
                   <button style={{ ...S.navBtn, ...S.navPri }}
                     onClick={() => { hit(ask.k); setAsk(null); }}>نعم، سجّلها</button>
@@ -1512,13 +1613,31 @@ const Chevron = ({ dir }) => (
     <path d={dir === "right" ? "M9 5l7 7-7 7" : "M15 5l-7 7 7 7"} />
   </svg>
 );
+/* علامة استفهام عربية «؟» — مرآة الشكل اللاتيني، مرسومة لا مكتوبة */
 const QMark = ({ size }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"
     strokeLinecap="round" strokeLinejoin="round"
-    style={{ width: size || 12, height: size || 12 }}>
+    style={{ width: size || 12, height: size || 12, transform: "scaleX(-1)" }}>
     <path d="M9.1 9.2a3 3 0 0 1 5.8 1c0 2-2.9 2.6-2.9 4.3" /><path d="M12 18.2h.01" />
   </svg>
 );
+/* مفتاح الصوت — يظهر في شريط الشهر فيراه الطالب في الشاشتين */
+const SoundBtn = () => {
+  useSound();
+  const on = soundOn();
+  return (
+    <button style={{ ...S.mArrow, ...(on ? {} : { opacity: .55 }) }}
+      aria-label={on ? "أطفئ الصوت" : "شغّل الصوت"}
+      onClick={() => { setSound(!on); if (!on) SFX.open(); }}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"
+        strokeLinecap="round" strokeLinejoin="round" style={{ width: 17, height: 17 }}>
+        <path d="M11 5 6.5 9H3v6h3.5L11 19z" />
+        {on ? <><path d="M15.5 8.5a5 5 0 0 1 0 7" /><path d="M18.5 5.8a9 9 0 0 1 0 12.4" /></>
+            : <><path d="m16.5 9.5 5 5" /><path d="m21.5 9.5-5 5" /></>}
+      </svg>
+    </button>
+  );
+};
 const EyeIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"
     strokeLinecap="round" style={{ width: 17, height: 17, flexShrink: 0 }}>
@@ -1983,7 +2102,7 @@ export function SunanEditor({ embedded = false }) {
 
 /* غلاف مستقلّ — للاستعمال في صفحة خاصّة باللوحة */
 export function SillaAdmin({ theme = "light" }) {
-  useEffect(() => { hydrateSunan(); }, []);
+  useEffect(() => { hydrateSunan(); hydrateSound(); }, []);
   return (
     <div data-theme={theme} style={S.root} dir="rtl">
       <Styles />
@@ -1996,7 +2115,7 @@ export function SillaAdmin({ theme = "light" }) {
    <SillaParadise/> — الغلاف: تبويبان (الجنّة · التعبئة)
    ════════════════════════════════════════════════════════════════════ */
 export default function SillaParadise({ theme = "light", initialLog = {}, editable = true }) {
-  useEffect(() => { hydrateSunan(); }, []);   /* تعديلات هذا المتصفّح، بعد التركيب */
+  useEffect(() => { hydrateSunan(); hydrateSound(); }, []);   /* تفضيلات هذا المتصفّح */
   const st = useSillaState(initialLog);
   const [tab, setTab] = useState("village");
   return (
@@ -2053,6 +2172,18 @@ function Styles() {
       button{font-family:inherit;cursor:pointer}
       button:disabled{opacity:.35;cursor:default}
       button:focus-visible,[role=button]:focus-visible{outline:2px solid var(--sp-gold);outline-offset:2px}
+      /* ارتداد اللمسة — يعطي إحساس اللعبة */
+      .sp-tap{transition:transform .12s cubic-bezier(.3,1.6,.5,1)}
+      .sp-tap:active{transform:scale(.94)}
+      .sp-pop{animation:spPop .9s cubic-bezier(.2,.8,.3,1) forwards}
+      @keyframes spPop{
+        0%{opacity:0;transform:translate(-50%,0) scale(.7)}
+        22%{opacity:1;transform:translate(-50%,-14px) scale(1.12)}
+        100%{opacity:0;transform:translate(-50%,-54px) scale(1)}
+      }
+      @media (prefers-reduced-motion:reduce){
+        .sp-tap,.sp-pop{transition:none;animation-duration:.01ms}
+      }
     `}</style>
   );
 }
@@ -2159,9 +2290,10 @@ const S = {
           alignItems: "center", justifyContent: "center", transition: "all .25s" },
   sqN: { fontSize: 9.5, fontWeight: 600, lineHeight: 1.25, textAlign: "center" },
   /* العدّاد في وسط الكرت تحت اسم السنّة */
-  sqCount: { minWidth: 34, padding: "2px 8px", borderRadius: 9,
-             borderWidth: 1.2, borderStyle: "solid", fontSize: 10.5, fontWeight: 700,
-             lineHeight: 1.5, letterSpacing: .3 },
+  sqCount: { minWidth: 38, height: 20, padding: "0 9px", borderRadius: 10,
+             borderWidth: 1.2, borderStyle: "solid", fontSize: 11, fontWeight: 700,
+             letterSpacing: .3, display: "flex", alignItems: "center",
+             justifyContent: "center", textAlign: "center" },
   sqI: { position: "absolute", top: 6, left: 6, width: 20, height: 20, borderRadius: "50%",
          borderWidth: 1, borderStyle: "solid", borderColor: "var(--sp-line)",
          background: "var(--sp-bg)", color: "var(--sp-mut)", padding: 0,
@@ -2174,6 +2306,8 @@ const S = {
             borderRadius: 13, padding: 12, fontSize: 12.5, fontWeight: 600, color: "var(--sp-prim)" },
   navPri: { background: "var(--sp-prim)", color: "#fff", borderColor: "var(--sp-prim)" },
   navDanger: { background: "var(--sp-danger)", color: "#fff", borderColor: "var(--sp-danger)" },
+  pop: { position: "fixed", zIndex: 70, pointerEvents: "none", fontSize: 15, fontWeight: 700,
+         textShadow: "0 1px 3px rgba(0,0,0,.25)", whiteSpace: "nowrap" },
   gridEmpty: { gridColumn: "1 / -1", border: "1.5px dashed var(--sp-line)", borderRadius: 15,
                padding: 20, textAlign: "center", fontSize: 11, color: "var(--sp-mut)" },
   saveB: { width: "100%", border: "none", borderRadius: 15, padding: 16, fontSize: 15,
