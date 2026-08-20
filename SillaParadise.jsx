@@ -812,21 +812,64 @@ DRAW.garden=(x,y,n)=>{const k=Math.min(n*2,40);
   X.beginPath();X.moveTo(a,b);X.lineTo(a,b-5);X.stroke();
   canopy(a,b-11,7.2,DK()?'#5FBF87':'#84D9A4',DK()?'#215F3E':'#357F52')})};
 
-DRAW.dome=(x,y,n)=>{if(!n)return;const s=.55+Math.min(n,30)/30*.6;shadow(x,y,30*s,9*s);
- X.save();X.globalAlpha=(.16+Math.min(n,30)/30*.24)+Math.sin(ph*.9)*.07;
- const gl=X.createRadialGradient(x,y-40*s,0,x,y-40*s,90*s);
- gl.addColorStop(0,'#FFE9A8');gl.addColorStop(.5,'rgba(255,220,140,.3)');
+DRAW.dome=(x,y,n)=>{if(!n)return;
+ /* قلب القرية: مسجدٌ كبير في وسط الصحن — أعلى ما فيها وأكثره تفصيلًا */
+ const g=Math.min(n,30)/30,s=.62+g*.42;
+ const [cx,cy]=SPOT.dome;
+ const SX=46*s,SY=30*s;
+ EXTENT.dome={x0:cx-SX,x1:cx+SX,y0:cy-SY,y1:cy+SY};
+ const px=IX(cx,cy),py=IY(cx,cy);
+
+ /* هالة النور — «قبة نور» */
+ X.save();X.globalAlpha=(.14+g*.2)+Math.sin(ph*.9)*.06;
+ const gl=X.createRadialGradient(px,py-74*s,0,px,py-74*s,132*s);
+ gl.addColorStop(0,'#FFE9A8');gl.addColorStop(.5,'rgba(255,220,140,.28)');
  gl.addColorStop(1,'rgba(255,233,168,0)');
- X.fillStyle=gl;X.beginPath();X.arc(x,y-40*s,90*s,0,7);X.fill();X.restore();
- X.fillStyle=lit(x,y,56*s,DK()?'#DCCDA0':'#F5EBD4',DK()?'#A0906A':'#C6B494');
- X.fillRect(x-28*s,y-30*s,56*s,30*s);
- const dg=X.createRadialGradient(x-10*s,y-46*s,3,x,y-36*s,30*s);
- dg.addColorStop(0,DK()?'#F0DFAE':'#F5E2AE');dg.addColorStop(1,DK()?'#A88418':'#B99442');
- X.fillStyle=dg;X.beginPath();X.arc(x,y-30*s,28*s,Math.PI,0);X.fill();
- X.fillStyle=DK()?'#D4B570':'#C9A96A';X.fillRect(x-1.7*s,y-70*s,3.4*s,12*s);
- X.beginPath();X.arc(x,y-72*s,3.8*s,0,7);X.fill();
- X.fillStyle='#FFEBAE';
- [[-19,-22],[-4,-22],[11,-22]].forEach(([p,q])=>X.fillRect(x+p*s,y+q*s,8*s,10*s))};
+ X.fillStyle=gl;X.beginPath();X.arc(px,py-74*s,132*s,0,7);X.fill();X.restore();
+
+ const st={t:DK()?'#D6C79C':'#F6EEDA',r:DK()?'#B8A97F':'#E2D6BA',l:DK()?'#8C7E58':'#C0B291'};
+ /* مصطبة عريضة */
+ isoBox(cx,cy,SX,SY,7*s,DK()?'#C2B48C':'#E8DFC6',DK()?'#A2946E':'#D0C4A6',DK()?'#7E7254':'#AEA286');
+ /* بيت الصلاة */
+ const HW=SX*.82,HD=SY*.78,HH=34*s;
+ isoBox(cx,cy,HW,HD,HH,st.t,st.r,st.l,7*s);
+ /* قناطر في الوجه الأمامي */
+ for(let i=-1;i<=1;i++){
+  const wx=cx+i*HW*.56,bx=IX(wx,cy+HD),by=IY(wx,cy+HD)-7*s;
+  X.fillStyle=DK()?'#0E2620':'#3E5E4A';
+  X.beginPath();X.moveTo(bx-7*s,by);X.lineTo(bx-7*s,by-HH*.5);
+  X.quadraticCurveTo(bx,by-HH*.92,bx+7*s,by-HH*.5);X.lineTo(bx+7*s,by);X.closePath();X.fill();
+  edge(1.1);
+  X.fillStyle='#FFEBAE';X.globalAlpha=.75;
+  X.beginPath();X.ellipse(bx,by-HH*.5,4*s,5*s,0,0,7);X.fill();X.globalAlpha=1}
+ /* أبراج الأركان */
+ [[-1,-1],[1,-1],[-1,1],[1,1]].forEach(([dx,dy])=>{
+  isoBox(cx+dx*HW*.94,cy+dy*HD*.94,5.5*s,5.5*s,HH*1.22,st.t,st.r,st.l,7*s);
+  const tx=IX(cx+dx*HW*.94,cy+dy*HD*.94),ty=IY(cx+dx*HW*.94,cy+dy*HD*.94)-7*s-HH*1.22;
+  X.fillStyle=DK()?'#D4B570':'#C9A96A';
+  X.beginPath();X.moveTo(tx-6*s,ty);X.lineTo(tx,ty-11*s);X.lineTo(tx+6*s,ty);X.closePath();X.fill();
+  edge(1)});
+ /* رقبة القبّة */
+ const DY=py-7*s-HH;
+ isoBox(cx,cy,HW*.6,HD*.7,15*s,st.t,st.r,st.l,7*s+HH);
+ const NY=DY-15*s;
+ /* القبّة الذهبية */
+ const R=HW*.66;
+ const dg=X.createRadialGradient(px-R*.34,NY-R*.5,3,px,NY,R*1.15);
+ dg.addColorStop(0,sat(DK()?'#F4E4B6':'#FBEFC4'));
+ dg.addColorStop(.55,sat(DK()?'#D9B558':'#E3C168'));
+ dg.addColorStop(1,sat(DK()?'#8E6E16':'#A07E28'));
+ X.fillStyle=dg;
+ X.beginPath();X.moveTo(px-R,NY);
+ X.bezierCurveTo(px-R,NY-R*1.18,px+R,NY-R*1.18,px+R,NY);
+ X.closePath();X.fill();edge(1.2);
+ /* طوق القبّة */
+ X.fillStyle=sat(DK()?'#B8922E':'#C9A54A');
+ X.beginPath();X.ellipse(px,NY,R,R*.24,0,0,7);X.fill();edge(1);
+ /* الهلال */
+ X.fillStyle=DK()?'#E5CF9A':'#D8B45E';
+ X.fillRect(px-1.8*s,NY-R*1.18-15*s,3.6*s,16*s);
+ X.beginPath();X.arc(px,NY-R*1.18-18*s,4.6*s,0,7);X.fill();edge(1)};
 
 DRAW.sundial=(x,y,n)=>{if(!n)return;shadow(x,y,14,5);
  X.fillStyle=lit(x,y,26,DK()?'#B8AA88':'#DCD2B4',DK()?'#7E735A':'#A89A78');
@@ -1003,10 +1046,13 @@ DRAW.crescent=(x,y,n)=>{if(!n)return;const s=.55+Math.min(n,30)/30*.6;X.save();
  X.globalAlpha=.4;const g=X.createRadialGradient(x,y,0,x,y,50*s);
  g.addColorStop(0,'rgba(255,243,196,.55)');g.addColorStop(1,'rgba(255,243,196,0)');
  X.fillStyle=g;X.beginPath();X.arc(x,y,50*s,0,7);X.fill();X.globalAlpha=1;
- X.fillStyle='#FBEFC0';X.beginPath();X.arc(x,y,17*s,0,7);X.fill();
- X.globalCompositeOperation='destination-out';
- X.beginPath();X.arc(x+7*s,y-4*s,15*s,0,7);X.fill();
- X.globalCompositeOperation='source-over';X.restore()};
+ /* الهلال دائرتان بقاعدة evenodd — لا محوَ ما تحته.
+    destination-out كان يثقب الأرض ثقبًا شفّافًا لا يرسم هلالًا. */
+ X.fillStyle='#FBEFC0';X.beginPath();
+ X.arc(x,y,17*s,0,7);X.arc(x+7*s,y-4*s,15*s,0,7);
+ X.fill('evenodd');
+ if(GS()){X.strokeStyle=OUT();X.lineWidth=1.1/ZOOM;X.lineJoin='round';X.stroke()}
+ X.restore()};
 
 DRAW.shieldL=(x,y,n)=>{if(!n)return;const s=.6+Math.min(n,30)/30*.55;X.save();
  X.globalAlpha=(.2+Math.min(n,30)/30*.2)+Math.sin(ph)*.07;
@@ -1263,7 +1309,7 @@ function ground() {
   /* ثلاث طبقات من التبقّع بمقاييس مختلفة — العشب المسطّح هو ما يجعل
      المشهد يبدو فقيرًا، والتنوّع اللونيّ وحده يملؤه بلا شيء يُرسم فوقه. */
   const rnd = (i, m) => ((i * 9301 + 49297) % 233280) / 233280 * m;
-  [[260, 34, .17], [170, 68, .13], [110, 122, .10]].forEach(([cnt, sz, al], L) => {
+  [[150, 40, .13], [95, 78, .10], [60, 130, .08]].forEach(([cnt, sz, al], L) => {
     for (let i = 0; i < cnt; i++) {
       const a = IN.x + rnd(i + L * 7, IN.w), b = IN.y + rnd(i * 3 + L * 13, IN.h);
       X.globalAlpha = al;
@@ -1279,7 +1325,7 @@ function ground() {
   X.globalAlpha = 1;
 
   /* بقعُ ترابٍ عارية — تكسر رتابة الأخضر */
-  for (let i = 0; i < 26; i++) {
+  for (let i = 0; i < 11; i++) {
     const a = IN.x + rnd(i + 91, IN.w), b = IN.y + rnd(i * 3 + 41, IN.h);
     X.globalAlpha = .24; X.fillStyle = dk ? "#3A3020" : "#C8B893";
     X.beginPath();
@@ -1288,7 +1334,7 @@ function ground() {
   X.globalAlpha = 1;
 
   /* نتفُ عشبٍ قائمة — أدقّ تفصيل، وأكثره أثرًا في كثافة المشهد */
-  for (let i = 0; i < 520; i++) {
+  for (let i = 0; i < 150; i++) {
     const a = IN.x + rnd(i + 3, IN.w), b = IN.y + rnd(i * 7 + 5, IN.h);
     X.strokeStyle = dk ? "rgba(86,168,132,.52)" : "rgba(56,124,74,.46)";
     X.lineWidth = 2.6; X.lineCap = "round";
@@ -1301,7 +1347,7 @@ function ground() {
   }
 
   /* حصى متناثر بظلٍّ خفيف */
-  for (let i = 0; i < 44; i++) {
+  for (let i = 0; i < 16; i++) {
     const a = IN.x + rnd(i + 55, IN.w), b = IN.y + rnd(i * 5 + 17, IN.h);
     const r = 4.4 + rnd(i, 5);
     X.fillStyle = "rgba(20,35,30,.16)";
@@ -1355,7 +1401,7 @@ function ground() {
   const clear = (a, b) => busy.every(([u, v]) => Math.hypot(a - u, b - v) > 96);
   let seed = 7;
   const rr = (m) => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648 * m; };
-  for (let i = 0; i < 190; i++) {
+  for (let i = 0; i < 62; i++) {
     const q = QUAD[i % 4];
     const a = q[0] + 16 + rr(q[2] - q[0] - 32), b = q[1] + 16 + rr(q[3] - q[1] - 32);
     if (!clear(a, b)) continue;
@@ -1455,6 +1501,7 @@ export function Village({ st, theme = "light" }) {
   const dpr = useRef(1);
   const view = useRef({ cx: 0, cy: 0, vw: 0, vh: 0 });   /* آخر إطار — لترجمة اللمسة */
   const tapAt = useRef(null);
+  const selRef = useRef(null);      /* ما هو مختار الآن — تقرؤه حلقة الرسم */
   const [tapped, setTapped] = useState(null);            /* البناء المفتوحة بطاقته */
   const prevN = useRef(null);      /* عدد الأبنية في الإطار السابق */
   const pops = useRef({});         /* ما يقفز الآن */
@@ -1613,6 +1660,34 @@ export function Village({ st, theme = "light" }) {
       objs.push({ y: pjy, f: () => drawPlayer(P.current, pjx, pjy) });
       objs.sort((m, n) => m.y - n.y).forEach((o) => o.f());
 
+      /* إطار الاختيار: معيّنٌ ينبض على الأرض تحت ما ضُغط */
+      const selNow = selRef.current;
+      if (selNow && (t[selNow.k] || 0)) {
+        const ex = EXTENT[selNow.i];
+        const [ax, ay] = SPOT[selNow.i];
+        const x0 = ex ? ex.x0 - 26 : ax - 34, x1 = ex ? ex.x1 + 26 : ax + 34;
+        const y0 = ex ? ex.y0 - 26 : ay - 34, y1 = ex ? ex.y1 + 26 : ay + 34;
+        const C = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map(([u, v]) => [IX(u, v), IY(u, v)]);
+        X.save();
+        X.beginPath();
+        C.forEach((q, i) => (i ? X.lineTo(q[0], q[1]) : X.moveTo(q[0], q[1])));
+        X.closePath();
+        X.fillStyle = "rgba(212,181,112,.14)"; X.fill();
+        X.globalAlpha = .55 + Math.sin(ph * 2.2) * .30;
+        X.strokeStyle = DK() ? "#E5CF9A" : "#B99442";
+        X.lineWidth = 3 / ZOOM; X.lineJoin = "round"; X.stroke();
+        /* زوايا مشدودة تزيدها وضوحًا */
+        X.globalAlpha = 1; X.lineWidth = 5 / ZOOM; X.lineCap = "round";
+        C.forEach((q, i) => {
+          const nx = C[(i + 1) % 4], pv = C[(i + 3) % 4];
+          [nx, pv].forEach((o) => {
+            X.beginPath(); X.moveTo(q[0], q[1]);
+            X.lineTo(q[0] + (o[0] - q[0]) * .22, q[1] + (o[1] - q[1]) * .22); X.stroke();
+          });
+        });
+        X.restore();
+      }
+
       /* الغبار فوق الجميع، ثم يُنسى */
       dust.current = dust.current.filter((q) => {
         const e = (now - q.t0) / 620;
@@ -1688,10 +1763,24 @@ export function Village({ st, theme = "light" }) {
 
       <div style={S.stage} ref={stageRef}>
         <canvas ref={cvRef} style={{ display: "block", width: "100%" }}
-          onPointerDown={(e) => { tapAt.current = { x: e.clientX, y: e.clientY }; }}
+          onPointerDown={(e) => {
+            tapAt.current = { x: e.clientX, y: e.clientY, px: e.clientX, py: e.clientY, on: true };
+            e.currentTarget.setPointerCapture?.(e.pointerId);
+          }}
+          onPointerMove={(e) => {
+            const d0 = tapAt.current; if (!d0 || !d0.on) return;
+            /* السحب يجرّ الأرض تحت الإصبع — أقرب إلى ألعاب القرى من المقبض */
+            const dpx = (e.clientX - d0.px) / ZOOM, dpy = (e.clientY - d0.py) / ZOOM;
+            d0.px = e.clientX; d0.py = e.clientY;
+            if (Math.hypot(e.clientX - d0.x, e.clientY - d0.y) < 6) return;
+            const u = -dpx / IK, v = -dpy / (IK * IZ);
+            P.current.x = Math.max(IN.x - 20, Math.min(IN.x + IN.w + 20, P.current.x + (u + v) / 2));
+            P.current.y = Math.max(IN.y - 10, Math.min(IN.y + IN.h + 20, P.current.y + (v - u) / 2));
+          }}
           onPointerUp={(e) => {
             const d0 = tapAt.current;
-            /* إصبعٌ زحف = تمرير الصفحة، لا اختيار */
+            if (d0) d0.on = false;
+            /* إصبعٌ زحف = تحريك المشهد، لا اختيار */
             if (!d0 || Math.hypot(e.clientX - d0.x, e.clientY - d0.y) > 10) return;
             const r = e.currentTarget.getBoundingClientRect();
             const v = view.current;
@@ -1719,8 +1808,8 @@ export function Village({ st, theme = "light" }) {
               }
               if (dist < nd) { nd = dist; best = { ...it, days }; }
             });
-            if (best && nd < 46) { SFX.open(); setTapped(best); }
-            else setTapped(null);
+            if (best && nd < 46) { SFX.open(); setTapped(best); selRef.current = best; }
+            else { setTapped(null); selRef.current = null; }
           }} />
         {near && (
           <div style={S.zc}>
@@ -1729,7 +1818,8 @@ export function Village({ st, theme = "light" }) {
           </div>
         )}
         {tapped && (
-          <div data-card style={S.card} onClick={() => setTapped(null)}>
+          <div data-card style={S.card}
+            onClick={() => { setTapped(null); selRef.current = null; }}>
             <div style={S.cardTop}>
               <div style={{ ...S.cardIc, background: tapped.c }}>
                 <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" stroke="#fff"
