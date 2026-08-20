@@ -325,6 +325,8 @@ export const SFX = {
   undo:  () => { tone(N.mi, { to: N.do * .85, dur: .2, vol: .12, type: "sine" }); },
   open:  () => tone(N.la, { dur: .1, vol: .09, type: "sine" }),
   nav:   () => tone(N.do, { dur: .07, vol: .08, type: "sine" }),
+  build: () => { tone(N.do * .5, { dur: .16, vol: .13, type: "triangle" });
+                 tone(N.sol, { dur: .1, vol: .07, type: "sine", at: .04 }); },
   save:  () => [N.do, N.mi, N.sol, N.do2].forEach((f, i) =>
                  tone(f, { dur: .22, vol: .13, type: "triangle", at: i * .085 })),
 };
@@ -467,11 +469,37 @@ let ph = 0;        // طور الحركة (الماء، التوهّج)
 let DKMODE = false;
 const DK = () => DKMODE;
 
+/* الظلّ يستلقي على الأرض المائلة، فيُضغط رأسيًا ويميل كما تميل الأرض */
 function shadow(x, y, w, h, op) {
   for (let i = 3; i >= 1; i--) {
     X.fillStyle = `rgba(20,35,30,${(op || 0.2) / i / 1.7})`;
-    X.beginPath(); X.ellipse(x + w * 0.18, y + 2, w * (1 + i * 0.13), h * (1 + i * 0.13), 0, 0, 7); X.fill();
+    X.beginPath();
+    X.ellipse(x + w * 0.18, y + 2, w * 1.18 * (1 + i * 0.13), h * IZ * (1 + i * 0.13),
+              -0.42, 0, 7);
+    X.fill();
   }
+}
+
+/* غبارٌ ينفض عند نشأة البناء — حلقةٌ تتّسع وتخفت على مستوى الأرض */
+function puff(x, y, e) {
+  const k = 1 - e;
+  const r = 8 + e * 46;
+  for (let i = 0; i < 11; i++) {
+    const a = i * 0.571 + 0.25;
+    const rr = r * (0.72 + (i % 3) * 0.16);
+    const sz = (9 + e * 13) * (0.7 + (i % 2) * 0.4);
+    X.globalAlpha = k * k * 0.72;
+    X.fillStyle = DK() ? "#8FA096" : "#C9BC9C";
+    X.beginPath();
+    X.ellipse(x + Math.cos(a) * rr * 1.3, y + Math.sin(a) * rr * IZ + 2 - e * 9,
+              sz, sz * IZ, 0, 0, 7);
+    X.fill();
+  }
+  /* حلقة أرضية تندفع خارجةً */
+  X.globalAlpha = k * 0.5; X.lineWidth = 3 * k;
+  X.strokeStyle = DK() ? "#A9BAAF" : "#D8CCAE";
+  X.beginPath(); X.ellipse(x, y + 2, r * 1.35, r * 1.35 * IZ, 0, 0, 7); X.stroke();
+  X.globalAlpha = 1;
 }
 /* صندوق إيزومتري: قاعدته مربّع في فضاء الأرض، وله سطح ووجهان مضاءان
    إضاءةً مختلفة — وهذا ما يعطي الحجم. (wx,wy) مركز القاعدة في فضاء الأرض. */
@@ -570,15 +598,19 @@ DRAW.house=(x,y,n)=>{const k=Math.min(n,30);
   X.fillStyle='#FFEBAE';X.fillRect(fx-14,fy-17,6,6);X.fillRect(fx+8,fy-17,6,6)})};
 
 /* ── المحراب: يعلو ويتعدّد ── */
-DRAW.mihrab=(x,y,n)=>{const k=Math.min(Math.ceil(n/6),5);
- for(let i=0;i<k;i++){const o=i*30-((k-1)*15),h=32+Math.min(n,30)*.7;
- shadow(x+o,y,11,4);
- X.fillStyle=lit(x+o,y,20,DK()?'#E0CB96':'#F5EBD4',DK()?'#A8935F':'#C9BB98');
- X.beginPath();X.moveTo(x+o-10,y);X.lineTo(x+o-10,y-h+11);
- X.quadraticCurveTo(x+o,y-h-7,x+o+10,y-h+11);X.lineTo(x+o+10,y);X.fill();
- X.fillStyle=DK()?'#0C231E':'#4E7A60';X.beginPath();X.moveTo(x+o-6,y);
- X.lineTo(x+o-6,y-h+14);X.quadraticCurveTo(x+o,y-h+1,x+o+6,y-h+14);X.lineTo(x+o+6,y);X.fill();
- X.fillStyle='rgba(255,255,255,.2)';X.fillRect(x+o-10,y-h+11,3,h-11)}};
+DRAW.mihrab=(x,y,n)=>{const k=Math.min(Math.ceil(n/6),5);if(!k)return;
+ const [mx,my]=SPOT.mihrab,h=32+Math.min(n,30)*.7,half=k*16,dep=11;
+ isoBox(mx,my,half,dep,h,
+  DK()?'#E4D0A0':'#F8EFDA',DK()?'#C2AD80':'#E0D3B4',DK()?'#9E8B62':'#C4B492');
+ /* القناطر محفورة في الوجه الأمامي — قاعدة كلٍّ على حافّته المائلة */
+ for(let i=0;i<k;i++){
+  const wx=mx-half+(i+.5)*(half*2/k);
+  const bx=IX(wx,my+dep),by=IY(wx,my+dep),w=half/k*.62;
+  X.fillStyle=DK()?'#0C231E':'#4E7A60';
+  X.beginPath();X.moveTo(bx-w,by);X.lineTo(bx-w,by-h+15);
+  X.quadraticCurveTo(bx,by-h-1,bx+w,by-h+15);X.lineTo(bx+w,by);X.closePath();X.fill();
+  X.strokeStyle=DK()?'#D4B570':'#B99442';X.lineWidth=1.3;X.stroke();
+  X.fillStyle='rgba(255,255,255,.16)';X.fillRect(bx-w,by-h+15,2,h-15)}};
 
 /* ── المئذنة: ترتفع مع الأيام (سقف ٣٠) ── */
 DRAW.minaret=(x,y,n)=>{if(!n)return;const h=26+Math.min(n,30)*2.2;shadow(x,y,10,4);
@@ -690,15 +722,18 @@ DRAW.sundial=(x,y,n)=>{if(!n)return;shadow(x,y,14,5);
  X.fillStyle=DK()?'#D4B570':'#B99442';X.beginPath();
  X.moveTo(x,y-6);X.lineTo(x+3,y-20);X.lineTo(x+6,y-6);X.fill()};
 
-DRAW.gate=(x,y,n)=>{if(!n)return;const s=.7+Math.min(n,30)/30*.5;shadow(x,y,20*s,5*s);
- X.fillStyle=lit(x,y,42*s,DK()?'#E0CB96':'#F2E7CE',DK()?'#9E8E67':'#C0AE8C');
- X.beginPath();X.moveTo(x-21*s,y);X.lineTo(x-21*s,y-24*s);
- X.arc(x,y-24*s,21*s,Math.PI,0);X.lineTo(x+21*s,y);X.lineTo(x+14*s,y);X.lineTo(x+14*s,y-24*s);
- X.arc(x,y-24*s,14*s,0,Math.PI,true);X.lineTo(x-14*s,y);X.closePath();X.fill();
- X.fillStyle=DK()?'#0C231E':'#3E5E4A';X.beginPath();X.moveTo(x-14*s,y);
- X.lineTo(x-14*s,y-24*s);X.arc(x,y-24*s,14*s,Math.PI,0);X.lineTo(x+14*s,y);X.fill();
- X.strokeStyle=DK()?'#D4B570':'#B99442';X.lineWidth=2;X.beginPath();
- X.moveTo(x-21*s,y-24*s);X.arc(x,y-24*s,21*s,Math.PI,0);X.stroke()};
+DRAW.gate=(x,y,n)=>{if(!n)return;const s=.7+Math.min(n,30)/30*.5;
+ const [gx,gy]=SPOT.gate,w=24*s,dep=13*s,h=48*s;
+ isoBox(gx,gy,w,dep,h,
+  DK()?'#E4D0A0':'#F6ECD6',DK()?'#C2AD80':'#DED0AE',DK()?'#9C8A63':'#C0AE8C');
+ const bx=IX(gx,gy+dep),by=IY(gx,gy+dep),o=13*s;
+ X.fillStyle=DK()?'#0C231E':'#3E5E4A';
+ X.beginPath();X.moveTo(bx-o,by);X.lineTo(bx-o,by-h*.52);
+ X.quadraticCurveTo(bx,by-h*.94,bx+o,by-h*.52);X.lineTo(bx+o,by);X.closePath();X.fill();
+ X.strokeStyle=DK()?'#D4B570':'#B99442';X.lineWidth=2;X.stroke();
+ /* شرفة تعلو البوابة */
+ isoBox(gx,gy,w*1.08,dep*1.08,5*s,DK()?'#EFDCAC':'#FBF3E2',
+  DK()?'#C2AD80':'#DED0AE',DK()?'#9C8A63':'#C0AE8C',h)};
 
 DRAW.pattern=(x,y,n)=>{if(!n)return;const k=Math.min(n,30);
  X.fillStyle=DK()?'rgba(212,181,112,.15)':'rgba(185,148,66,.12)';
@@ -895,6 +930,8 @@ export const SPOT={
  crescent:[962,98],
  shieldL:[110,111]};
 
+/* ما يترنّح مع الريح — النبات القائم وحده، لا ما يغطّي الأرض */
+const SWAY = { palm:1, arak:1, fruit:1, flower:1, garden:1 };
 const BACK   = ["fort","fence","stream","crescent","shieldL","pattern","path"];
 const SORTED = ["minaret","gate","mihrab","sundial","house","dome","rug","bridge","fruit",
                 "well","palm","arak","garden","spring","lamp","bighouse","fountain","tent","flower"];
@@ -1152,6 +1189,10 @@ export function Village({ st, theme = "light" }) {
   const joy = useRef({ x: 0, y: 0 });
   const keys = useRef({});
   const dpr = useRef(1);
+  const prevN = useRef(null);      /* عدد الأبنية في الإطار السابق */
+  const pops = useRef({});         /* ما يقفز الآن */
+  const dust = useRef([]);         /* نُفَخ الغبار الحيّة */
+  const lastBoom = useRef(0);
 
   useEffect(() => { DKMODE = theme === "dark"; }, [theme]);
 
@@ -1231,20 +1272,84 @@ export function Village({ st, theme = "light" }) {
       X.fillStyle = DK() ? "#0A1815" : "#D8D2C0";
       X.fillRect(cx - vw / 2, cy - vh / 2, vw, vh);
       X.drawImage(groundLayer(), 0, 0);
+      /* ما نما منذ الإطار السابق: يقفز وينفض غبارًا */
+      const now = performance.now();
+      const snap = {};
+      Object.keys(SPOT).forEach((nm) => {
+        const it = ITEMS.find((i) => i.i === nm);
+        snap[nm] = it ? (t[it.k] || 0) : 0;
+      });
+      if (prevN.current) {
+        let grew = false;
+        Object.keys(snap).forEach((nm) => {
+          if (snap[nm] > (prevN.current[nm] || 0)) {
+            pops.current[nm] = now; grew = true;
+            const [a, b] = SPOT[nm];
+            dust.current.push({ x: IX(a, b), y: IY(a, b), t0: now });
+          }
+        });
+        if (grew && now - lastBoom.current > 220) { lastBoom.current = now; SFX.build(); }
+      }
+      prevN.current = snap;
+
+      /* قفزة النشأة: تمدّد ثم استقرار حول قاعدة البناء */
+      const popAt = (nm, px, py) => {
+        const t0 = pops.current[nm];
+        if (!t0) return false;
+        const e = (now - t0) / 560;
+        if (e >= 1) { delete pops.current[nm]; return false; }
+        const w = Math.sin(e * Math.PI) * (1 - e);
+        X.save(); X.translate(px, py);
+        X.scale(1 - w * 0.14, 1 + w * 0.26);
+        X.translate(-px, -py);
+        return true;
+      };
+      /* ترنّح خفيف في النبات — ميلٌ يزداد بالارتفاع فيبدو كأنه ريح */
+      const swayAt = (nm, px, py) => {
+        if (!SWAY[nm]) return false;
+        const k = Math.sin(ph * 0.7 + px * 0.02) * 0.016;
+        X.save(); X.translate(px, py); X.transform(1, 0, k, 1, 0, 0); X.translate(-px, -py);
+        return true;
+      };
+
       BACK.forEach((nm) => {
         const it = ITEMS.find((i) => i.i === nm); if (!it) return;
-        const [a, b] = SPOT[nm]; DRAW[nm](IX(a, b), IY(a, b), t[it.k] || 0);
+        const [a, b] = SPOT[nm], px = IX(a, b), py = IY(a, b);
+        const pop = popAt(nm, px, py);
+        DRAW[nm](px, py, t[it.k] || 0);
+        if (pop) X.restore();
       });
+      /* بريقٌ يتحرّك على ماء البحرة — الأرض مخزّنة صورةً فلا حركة فيها */
+      const bg = IX(535, 420), bgy = IY(535, 420);
+      X.globalAlpha = .18 + Math.sin(ph * .9) * .08;
+      X.fillStyle = "#FFFFFF";
+      X.beginPath();
+      X.ellipse(bg - 9 + Math.sin(ph * .5) * 5, bgy - 4, 12, 12 * IZ * .7, -0.42, 0, 7);
+      X.fill(); X.globalAlpha = 1;
+
       const objs = [];
       SORTED.forEach((nm) => {
         const it = ITEMS.find((i) => i.i === nm); if (!it) return;
         const n = t[it.k] || 0; if (!n) return;
-        const [a, b] = SPOT[nm];
+        const [a, b] = SPOT[nm], px = IX(a, b), py = IY(a, b);
         /* العمق في الإيزومتري = س+ص، وهو نفسه إحداثي الشاشة الرأسي */
-        objs.push({ y: IY(a, b), f: () => DRAW[nm](IX(a, b), IY(a, b), n) });
+        objs.push({ y: py, f: () => {
+          const pop = popAt(nm, px, py), sw = swayAt(nm, px, py);
+          DRAW[nm](px, py, n);
+          if (sw) X.restore();
+          if (pop) X.restore();
+        } });
       });
       objs.push({ y: pjy, f: () => drawPlayer(P.current, pjx, pjy) });
       objs.sort((m, n) => m.y - n.y).forEach((o) => o.f());
+
+      /* الغبار فوق الجميع، ثم يُنسى */
+      dust.current = dust.current.filter((q) => {
+        const e = (now - q.t0) / 620;
+        if (e >= 1) return false;
+        puff(q.x, q.y, e);
+        return true;
+      });
       X.setTransform(d, 0, 0, d, 0, 0);
       /* عمق جوّي */
       const vg = X.createRadialGradient(cw / 2, ch / 2, ch * .32, cw / 2, ch / 2, ch * .95);
