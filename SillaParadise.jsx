@@ -253,6 +253,7 @@ export const HM = ["محرّم","صفر","ربيع الأول","ربيع الآ�
                    "رجب","شعبان","رمضان","شوّال","ذو القعدة","ذو الحجة"];
 export const GM = ["يناير","فبراير","مارس","أبريل","مايو","يونيو",
                    "يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
+export const WD = ["أحد","اثنين","ثلاثاء","أربعاء","خميس","جمعة","سبت"];
 
 const DAYMS = 86400000;
 const p2 = (n) => (n < 10 ? "0" + n : "" + n);
@@ -1238,33 +1239,43 @@ export function Recorder({ st, onSave }) {
 
   const secIdx = Math.min(sec, Math.max(0, SUNAN.length - 1));
   const S0 = SUNAN[secIdx] || { id: "-", t: "", items: [] };
+  const stripRef = useRef(null);
   const quickLeft = QUICK().filter((i) => !isDone(i, day[i.k] || 0)).length;
   const sel = fromIso(dayKey);
   const todayKey = iso(today());
+
+  /* اليوم المفتوح يبقى في وسط الشريط — يُختار اليوم تلقائيًا عند الفتح */
+  useEffect(() => {
+    const el = stripRef.current && stripRef.current.querySelector(`[data-day="${dayKey}"]`);
+    if (el && el.scrollIntoView) el.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+  }, [dayKey, start]);
 
   return (
     <div style={S.wrap} dir="rtl">
       {/* الشهر ثم اليوم */}
       <MonthBar start={start} setStart={setStart} sub={`${fmt(monthGems)} جوهرة هذا الشهر`} />
 
-      <div style={S.cal}>
+      {/* شريط الأيام — صفٌّ واحد يُمرَّر أفقيًا بدل شبكة ٣٠ مربّعًا */}
+      <div style={S.dayStrip} ref={stripRef}>
         {days.map((d) => {
           const k = iso(d), h = hijri(d).d;
           const future = isFuture(d);
           const score = dayScore(k);
           const on = k === dayKey;
+          const isToday = k === todayKey;
           const lvl = score >= 18 ? 3 : score >= 8 ? 2 : score > 0 ? 1 : 0;
           return (
-            <button key={k} disabled={future} onClick={() => setDayKey(k)}
-              style={{ ...S.calD,
-                ...(lvl ? { background: ["", "var(--sp-mintBg)", "var(--sp-mintBg)", "var(--sp-aura)"][lvl] } : {}),
-                ...(k === todayKey ? { borderColor: "var(--sp-mint)" } : {}),
-                ...(on ? S.calOn : {}),
-                ...(future ? { opacity: .32 } : {}) }}>
-              <span style={{ fontSize: 12.5, fontWeight: 700 }}>{ar(h)}</span>
-              <span style={{ ...S.calDot,
+            <button key={k} data-day={k} disabled={future} onClick={() => setDayKey(k)}
+              style={{ ...S.dChip,
+                ...(lvl ? { background: lvl === 3 ? "var(--sp-aura)" : "var(--sp-mintBg)" } : {}),
+                ...(isToday && !on ? { borderColor: "var(--sp-mint)" } : {}),
+                ...(on ? S.dChipSel : {}),
+                ...(future ? { opacity: .34 } : {}) }}>
+              <span style={S.dWd}>{isToday ? "اليوم" : WD[d.getDay()]}</span>
+              <span style={S.dh}>{ar(h)}</span>
+              <span style={{ ...S.dm,
                 background: lvl === 3 ? "var(--sp-gold)" : lvl === 2 ? "var(--sp-mint)"
-                          : lvl === 1 ? "var(--sp-goldL)" : "transparent" }} />
+                          : lvl === 1 ? "var(--sp-goldL)" : "var(--sp-line)" }} />
             </button>
           );
         })}
@@ -2089,14 +2100,19 @@ const S = {
   slBuilt: { fontSize: 10.5, color: "var(--sp-gold)", fontWeight: 600 },
   slEnds: { display: "flex", justifyContent: "space-between", fontSize: 9, color: "var(--sp-mut)" },
   /* شريط الأيام */
-  dayStrip: { display: "flex", gap: 6, overflowX: "auto", padding: "2px 1px 9px" },
-  dChip: { flexShrink: 0, minWidth: 58, padding: "8px 6px", borderRadius: 12,
-           background: "var(--sp-surf)", borderWidth: 1, borderStyle: "solid", borderColor: "var(--sp-line)",
-           textAlign: "center", cursor: "pointer" },
-  dChipSel: { background: "var(--sp-surf2)", borderColor: "var(--sp-gold)" },
-  dh: { fontSize: 12, fontWeight: 700, lineHeight: 1.1 },
-  dg: { fontSize: 8, color: "var(--sp-mut)", marginTop: 2 },
-  dm: { width: 5, height: 5, borderRadius: "50%", margin: "4px auto 0" },
+  dayStrip: { display: "flex", gap: 7, overflowX: "auto", padding: "3px 2px 10px",
+              scrollSnapType: "x proximity", WebkitOverflowScrolling: "touch" },
+  dChip: { flexShrink: 0, width: 52, padding: "7px 4px 6px", borderRadius: 14,
+           background: "var(--sp-surf)", color: "var(--sp-txt)",
+           borderWidth: 1.5, borderStyle: "solid", borderColor: "var(--sp-line)",
+           display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
+           cursor: "pointer", scrollSnapAlign: "center",
+           transition: "border-color .2s, background .2s" },
+  dChipSel: { borderColor: "var(--sp-gold)", background: "var(--sp-surf2)",
+              boxShadow: "var(--sp-sh)" },
+  dWd: { fontSize: 8.5, color: "var(--sp-mut)", lineHeight: 1, whiteSpace: "nowrap" },
+  dh: { fontSize: 16, fontWeight: 700, lineHeight: 1.05 },
+  dm: { width: 5, height: 5, borderRadius: "50%" },
   dFull: { textAlign: "center", fontSize: 10.5, color: "var(--sp-mut)", marginBottom: 12 },
   /* الحلقة */
   topBar: { display: "flex", alignItems: "center", gap: 13, background: "var(--sp-surf)",
@@ -2191,15 +2207,6 @@ const S = {
   mArrowOff: { opacity: .3 },
   mName: { fontSize: 14, fontWeight: 700 },
   mSub: { fontSize: 9.5, color: "var(--sp-mut)", marginTop: 1 },
-  /* تقويم الشهر */
-  cal: { display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 6, marginBottom: 8 },
-  calD: { aspectRatio: "1", borderRadius: 12, borderWidth: 1.5, borderStyle: "solid", borderColor: "var(--sp-line)",
-          background: "var(--sp-surf)", color: "var(--sp-txt)", display: "flex",
-          flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3,
-          padding: 0, transition: "transform .15s,border-color .2s" },
-  calOn: { borderColor: "var(--sp-gold)", background: "var(--sp-surf2)",
-           transform: "scale(1.06)", boxShadow: "var(--sp-sh)" },
-  calDot: { width: 5, height: 5, borderRadius: "50%" },
   /* لوحة الإدارة */
   expB: { border: "1px solid var(--sp-gold)", background: "var(--sp-surf)", color: "var(--sp-gold)",
           borderRadius: 12, padding: "8px 15px", fontSize: 12.5, fontWeight: 700 },
