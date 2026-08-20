@@ -274,6 +274,70 @@ export function useSunanVersion() {
    والنغمة المولّدة بضع مئات البايتات من الكود بدل مئات الكيلوبايتات.
    سياسة المتصفّحات تمنع الصوت قبل لمسة المستخدم، فالسياق يُنشأ عند أول لمسة. */
 
+/* ════════ طابع المشهد ════════
+   «هادئ» يتبع هوية الموقع كما تنصّ §٩. و«لعبة» طابعٌ مستعار من ألعاب
+   القرى: حدود داكنة سميكة وألوان مشبعة وظلال أعمق — يفصل البرنامج
+   بصريًّا عن الموقع، فهو خيارُ صاحب المشروع لا الأصل.                    */
+export const LS_SKIN = "silla.skin.v1";
+const SK = { game: false };
+let skinVer = 0;
+const skinSubs = new Set();
+export const gameSkin = () => SK.game;
+const GS = () => SK.game;               /* للرسّامين */
+export function setSkin(on) {
+  SK.game = !!on;
+  GCACHE.light = GCACHE.dark = GCACHE.lightG = GCACHE.darkG = null;
+  skinVer++; skinSubs.forEach((f) => f());
+  try { window.localStorage.setItem(LS_SKIN, SK.game ? "1" : "0"); } catch (e) { /* تجاهل */ }
+}
+export function hydrateSkin() {
+  try { if (window.localStorage.getItem(LS_SKIN) === "1") setSkin(true); } catch (e) { /* تجاهل */ }
+}
+export function useSkin() {
+  return useSyncExternalStore(
+    (f) => { skinSubs.add(f); return () => skinSubs.delete(f); },
+    () => skinVer, () => skinVer);
+}
+/* حدٌّ داكن سميك — أظهر ما يميّز أسلوب اللعبة */
+const OUT = () => (DK() ? "#0A1A14" : "#22392C");
+/* المشهد يُرسم بتكبير ٠٫٤٤، فحدٌّ بعرض ٢ يظهر أقلّ من بكسل.
+   العرض هنا بمقياس المشهد: يُقسَم على ZOOM ليصل إلى العين بالسماكة المقصودة. */
+function edge(w) {
+  if (!GS()) return false;
+  X.strokeStyle = OUT(); X.lineWidth = (w || 1) / ZOOM;
+  X.lineJoin = "round"; X.lineCap = "round"; X.stroke(); return true;
+}
+
+/* تشبّعٌ مركزيّ: بدل تغيير كل لون في السـتّة والعشرين رسّامًا، يمرّ اللون
+   من هنا فيشتدّ تشبّعه ويتباعد فاتحه عن داكنه — وهذا جوهر ألوان اللعبة. */
+const SATC = {};
+function sat(hex) {
+  if (!GS() || typeof hex !== "string" || hex[0] !== "#" || hex.length < 7) return hex;
+  const memo = SATC[hex]; if (memo) return memo;
+  const r = parseInt(hex.slice(1, 3), 16) / 255,
+        g = parseInt(hex.slice(3, 5), 16) / 255,
+        b = parseInt(hex.slice(5, 7), 16) / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2;
+  let h = 0, sv = 0;
+  if (mx !== mn) {
+    const d = mx - mn;
+    sv = l > .5 ? d / (2 - mx - mn) : d / (mx + mn);
+    h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    h /= 6;
+  }
+  sv = Math.min(1, sv * 1.55 + .06);
+  const L = Math.min(.96, Math.max(.05, l + (l > .5 ? .05 : -.06)));
+  const q = L < .5 ? L * (1 + sv) : L + sv - L * sv, pq = 2 * L - q;
+  const ch = (t) => {
+    t = (t + 1) % 1;
+    const v = t < 1 / 6 ? pq + (q - pq) * 6 * t
+            : t < 1 / 2 ? q
+            : t < 2 / 3 ? pq + (q - pq) * (2 / 3 - t) * 6 : pq;
+    return Math.round(v * 255).toString(16).padStart(2, "0");
+  };
+  return (SATC[hex] = "#" + ch(h + 1 / 3) + ch(h) + ch(h - 1 / 3));
+}
+
 export const LS_SOUND = "silla.sound.v1";
 const AUD = { ctx: null, master: null, on: true };
 let soundVer = 0;
@@ -481,7 +545,7 @@ const DK = () => DKMODE;
 /* الظلّ يستلقي على الأرض المائلة، فيُضغط رأسيًا ويميل كما تميل الأرض */
 function shadow(x, y, w, h, op) {
   for (let i = 3; i >= 1; i--) {
-    X.fillStyle = `rgba(20,35,30,${(op || 0.2) / i / 1.7})`;
+    X.fillStyle = `rgba(20,35,30,${(op || 0.2) * (GS() ? 1.7 : 1) / i / 1.7})`;
     X.beginPath();
     X.ellipse(x + w * 0.18, y + 2, w * 1.18 * (1 + i * 0.13), h * IZ * (1 + i * 0.13),
               -0.42, 0, 7);
@@ -520,9 +584,9 @@ function isoBox(wx, wy, sx, sy, h, cTop, cR, cL, lift) {
   const Wc = [IX(wx - sx, wy + sy), IY(wx - sx, wy + sy) - L];
   const up = (q) => [q[0], q[1] - h];
   const face = (pts, c) => {
-    X.fillStyle = c; X.beginPath();
+    X.fillStyle = sat(c); X.beginPath();
     pts.forEach((q, i) => (i ? X.lineTo(q[0], q[1]) : X.moveTo(q[0], q[1])));
-    X.closePath(); X.fill();
+    X.closePath(); X.fill(); edge(1.1);
   };
   if (!L) {
     X.fillStyle = "rgba(20,35,30,.20)";
@@ -546,9 +610,9 @@ function isoHouse(wx, wy, sx, sy, hw, hr, C) {
   const R1 = P4(wx - sx, wy), R2 = P4(wx + sx, wy);
   R1[1] -= hr; R2[1] -= hr;
   const face = (pts, c) => {
-    X.fillStyle = c; X.beginPath();
+    X.fillStyle = sat(c); X.beginPath();
     pts.forEach((q, i) => (i ? X.lineTo(q[0], q[1]) : X.moveTo(q[0], q[1])));
-    X.closePath(); X.fill();
+    X.closePath(); X.fill(); edge(1.1);
   };
   face([N, E, R2, R1], C.roofBack);                 /* الميل الخلفيّ */
   face([N, Wc, R1], C.gable);                       /* جملون غربيّ */
@@ -580,19 +644,19 @@ function canopy(px, py, r, cLit, cDark) {
   X.fillStyle = "rgba(12,32,24,.20)";
   X.beginPath(); X.ellipse(px + r * .16, py + r * .30, r * .96, r * .70, 0, 0, 7); X.fill();
   const g = X.createLinearGradient(px - r, py - r, px + r * .7, py + r * .8);
-  g.addColorStop(0, cLit); g.addColorStop(1, cDark);
+  g.addColorStop(0, sat(cLit)); g.addColorStop(1, sat(cDark));
   X.fillStyle = g;
-  X.beginPath(); X.ellipse(px, py, r, r * .88, 0, 0, 7); X.fill();
+  X.beginPath(); X.ellipse(px, py, r, r * .88, 0, 0, 7); X.fill(); edge(1.2);
   X.fillStyle = "rgba(255,255,255,.20)";
   X.beginPath(); X.ellipse(px - r * .32, py - r * .34, r * .34, r * .24, -.5, 0, 7); X.fill();
 }
 
 /* جذع بوجهين — مضاء من الغرب، ظليل من الشرق */
 function trunk(px, py, w, h, cLit, cDark) {
-  X.fillStyle = cDark;
+  X.fillStyle = sat(cDark);
   X.beginPath(); X.moveTo(px - w, py); X.lineTo(px - w * .62, py - h);
-  X.lineTo(px + w * .62, py - h); X.lineTo(px + w, py); X.closePath(); X.fill();
-  X.fillStyle = cLit;
+  X.lineTo(px + w * .62, py - h); X.lineTo(px + w, py); X.closePath(); X.fill(); edge(1);
+  X.fillStyle = sat(cLit);
   X.beginPath(); X.moveTo(px - w, py); X.lineTo(px - w * .62, py - h);
   X.lineTo(px, py - h); X.lineTo(px, py); X.closePath(); X.fill();
 }
@@ -1042,7 +1106,16 @@ const PAL = {
            curb:"#4A4B41", curbSh:"rgba(0,0,0,.34)",
            bedIn:"#1B453B", bedTx:"rgba(0,0,0,.10)", gold:"#D4B570" },
 };
-const pal = () => (DK() ? PAL.dark : PAL.light);
+const RAWPAL = () => (DK() ? PAL.dark : PAL.light);
+const PALC = { calm: null, game: null, k: null };
+const pal = () => {
+  const key = (DK() ? "d" : "l") + (GS() ? "g" : "c");
+  if (PALC.k === key) return PALC.v;
+  const raw = RAWPAL(), out = {};
+  Object.keys(raw).forEach((n) => (out[n] = sat(raw[n])));
+  PALC.k = key; PALC.v = out;
+  return out;
+};
 
 /* نجمة ثمانية = مربّعان متراكبان بزاوية ٤٥° — «رُبع الحزب» */
 function star8(cx, cy, r, rot) {
@@ -1228,9 +1301,9 @@ function ground() {
 
 /* الأرض ثابتة لا تتغيّر — تُرسم مرّة واحدة لكل ثيم وتُنسخ كصورة كل إطار.
    بدونها نُعيد ٧٢٠ عملية رسم ستّين مرّة في الثانية على الجوال.          */
-const GCACHE = { light: null, dark: null };
+const GCACHE = { light: null, dark: null, lightG: null, darkG: null };
 function groundLayer() {
-  const key = DK() ? "dark" : "light";
+  const key = (DK() ? "dark" : "light") + (GS() ? "G" : "");
   if (GCACHE[key]) return GCACHE[key];
   const c = document.createElement("canvas");
   c.width = W; c.height = H;
@@ -1262,6 +1335,7 @@ function drawPlayer(src, px, py) {
    ════════════════════════════════════════════════════════════════════ */
 export function Village({ st, theme = "light" }) {
   useSunanVersion();
+  useSkin();
   const { tally, allGems, monthGems, start, setStart, days } = st;
   const cvRef = useRef(null);
   const stageRef = useRef(null);
@@ -1497,9 +1571,12 @@ export function Village({ st, theme = "light" }) {
             <div style={S.sub}>{preview ? "معاينة: كل السنن ٣٠ يومًا" : "تجوّل فيما عمّرته"}</div>
           </div>
         </div>
-        <div style={S.stat}>
-          <div style={S.statN}>{fmt(allGems)}</div>
-          <div style={S.statL}>جوهرة</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <SkinBtn />
+          <div style={S.stat}>
+            <div style={S.statN}>{fmt(allGems)}</div>
+            <div style={S.statL}>جوهرة</div>
+          </div>
         </div>
       </div>
 
@@ -1967,6 +2044,24 @@ const SoundBtn = () => {
     </button>
   );
 };
+/* مفتاح الطابع: هادئ (هوية الموقع) ⟷ لعبة (حدود وألوان مشبعة) */
+const SkinBtn = () => {
+  useSkin();
+  const on = gameSkin();
+  return (
+    <button style={{ ...S.skinB, ...(on ? S.skinOn : {}) }}
+      aria-label={on ? "الطابع: لعبة — اضغط للهادئ" : "الطابع: هادئ — اضغط للعبة"}
+      onClick={() => { SFX.nav(); setSkin(!on); }}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"
+        strokeLinecap="round" strokeLinejoin="round" style={{ width: 16, height: 16 }}>
+        <circle cx="13.5" cy="6.5" r="1.2" /><circle cx="17.5" cy="10.5" r="1.2" />
+        <circle cx="8.5" cy="7.5" r="1.2" /><circle cx="6.5" cy="12.5" r="1.2" />
+        <path d="M12 2a10 10 0 0 0 0 20 2.5 2.5 0 0 0 2-4 2.5 2.5 0 0 1 2-4h2a4 4 0 0 0 4-4 10 10 0 0 0-10-8z" />
+      </svg>
+      <span style={S.skinT}>{on ? "لعبة" : "هادئ"}</span>
+    </button>
+  );
+};
 const EyeIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"
     strokeLinecap="round" style={{ width: 17, height: 17, flexShrink: 0 }}>
@@ -2431,7 +2526,7 @@ export function SunanEditor({ embedded = false }) {
 
 /* غلاف مستقلّ — للاستعمال في صفحة خاصّة باللوحة */
 export function SillaAdmin({ theme = "light" }) {
-  useEffect(() => { hydrateSunan(); hydrateSound(); }, []);
+  useEffect(() => { hydrateSunan(); hydrateSound(); hydrateSkin(); }, []);
   return (
     <div data-theme={theme} style={S.root} dir="rtl">
       <Styles />
@@ -2444,7 +2539,7 @@ export function SillaAdmin({ theme = "light" }) {
    <SillaParadise/> — الغلاف: تبويبان (الجنّة · التعبئة)
    ════════════════════════════════════════════════════════════════════ */
 export default function SillaParadise({ theme = "light", initialLog = {}, editable = true }) {
-  useEffect(() => { hydrateSunan(); hydrateSound(); }, []);   /* تفضيلات هذا المتصفّح */
+  useEffect(() => { hydrateSunan(); hydrateSound(); hydrateSkin(); }, []);  /* تفضيلات المتصفّح */
   const st = useSillaState(initialLog);
   const [tab, setTab] = useState("village");
   return (
@@ -2528,6 +2623,13 @@ const S = {
   sub: { fontSize: 10.5, color: "var(--sp-mut)" },
   stat: { background: "var(--sp-surf)", border: "1px solid var(--sp-line)", borderRadius: 13,
           padding: "7px 13px", textAlign: "center", boxShadow: "var(--sp-sh)" },
+  skinB: { display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
+           background: "var(--sp-surf)", borderWidth: 1, borderStyle: "solid",
+           borderColor: "var(--sp-line)", borderRadius: 13, padding: "7px 10px",
+           color: "var(--sp-mut)", boxShadow: "var(--sp-sh)" },
+  skinOn: { borderColor: "var(--sp-gold)", color: "var(--sp-gold)",
+            background: "var(--sp-aura)" },
+  skinT: { fontSize: 8.5, fontWeight: 700 },
   statN: { fontSize: 18, fontWeight: 700, color: "var(--sp-gold)", lineHeight: 1 },
   statL: { fontSize: 9, color: "var(--sp-mut)" },
   /* المشهد */
