@@ -38,6 +38,12 @@ const ZOOM = 0.44;                     // تكبير ثابت — الجنّة �
    وما يقف عليها (الأبنية، الأشجار، اللاعب) يُرسم منتصبًا عند موضعه المُسقَط —
    وهذا هو أصل الإيزومتري: أرضٌ مائلة وأجسامٌ قائمة.
    المعامل مختار ليملأ المعيّنُ عرض الأرض تمامًا ويبقى فوقه فسحة لارتفاعات البناء. */
+/* سقف النموّ: أيام الشهر المعروض. كان ثابتًا ٣٠، فشهرُ ٢٩ يومًا لا يبلغ
+   فيه أيّ بناء تمامَه — والنهر يقف قبل آخره. تضبطه <Village/> كل إطار. */
+let DCAP = 30;
+/* آخر عددٍ رآه المشهد — خارج المكوّن ليبقى بين تبديل التبويبات، وإلا
+   عاد المستخدم من «حفظ وبناء» فلم يجد ما ينمو أمامه. */
+const LASTN = { v: null };
 const IK = 0.565;                       /* (١٠٨٠+٨٣٠)×IK = عرض الأرض */
 const IZ = 0.62;                        /* الضغط الرأسي — أقلّ من ٢:١ فيملأ المعيّن اللوحة */
 const IOX = 469, IOY = 118;             /* ١١٨ فسحة علوية لأعلى بناء (المئذنة ٩٢) */
@@ -339,6 +345,59 @@ function sat(hex) {
   return (SATC[hex] = "#" + ch(h + 1 / 3) + ch(h) + ch(h - 1 / 3));
 }
 
+/* ════════ المراتب ════════
+   الأجر غيبٌ بعيد، والجواهر رقمٌ يكبر بلا أثر. فالمراتب تجعل للتقدّم
+   اسمًا يُنادى به وأثرًا يُرى في الأرض كلّها — يبلغ الطالب عتبةً فتترقّى
+   جنّته وتتبدّل ألوانها. يضبطها صاحب المشروع من شاشة التحرير.        */
+export const LS_TIERS = "silla.tiers.v1";
+const DEFAULT_TIERS = [
+  { id:"t1", n:"غَرْس",    g:0,    c:"#6BBFB2", d:"بدأتَ الغرس — أوّل أثرٍ في أرضك." },
+  { id:"t2", n:"رَوْضة",   g:250,  c:"#5AAE6B", d:"اخضرّت أرضك وصارت روضة." },
+  { id:"t3", n:"بُستان",   g:700,  c:"#C9A227", d:"أثمر غرسك، وصارت جنّتك بستانًا." },
+  { id:"t4", n:"جَنّة",    g:1500, c:"#E08A3C", d:"تمّت عمارتها، وصارت جنّةً تُرى." },
+  { id:"t5", n:"فِرْدَوْس", g:3000, c:"#B96FD0", d:"بلغتَ أعلاها — الفردوس الأعلى." },
+];
+export let TIERS = DEFAULT_TIERS.map((t) => ({ ...t }));
+let tierVer = 0;
+const tierSubs = new Set();
+export const defaultTiers = () => DEFAULT_TIERS.map((t) => ({ ...t }));
+export function setTiers(list) {
+  TIERS = (Array.isArray(list) ? list : [])
+    .filter((t) => t && t.id)
+    .map((t) => ({ id:String(t.id), n:String(t.n||""), g:Math.max(0,Math.round(+t.g||0)),
+                   c:t.c||"#6BBFB2", d:String(t.d||"") }))
+    .sort((a, b) => a.g - b.g);
+  if (!TIERS.length) TIERS = defaultTiers();
+  tierVer++; tierSubs.forEach((f) => f());
+  try { window.localStorage.setItem(LS_TIERS, JSON.stringify(TIERS)); } catch (e) { /* تجاهل */ }
+}
+export function resetTiers() {
+  try { window.localStorage.removeItem(LS_TIERS); } catch (e) { /* تجاهل */ }
+  TIERS = defaultTiers(); tierVer++; tierSubs.forEach((f) => f());
+}
+export function hydrateTiers() {
+  try {
+    const raw = window.localStorage.getItem(LS_TIERS);
+    if (raw) { const v = JSON.parse(raw); if (Array.isArray(v) && v.length) setTiers(v); }
+  } catch (e) { /* تجاهل */ }
+}
+export function useTiers() {
+  return useSyncExternalStore(
+    (f) => { tierSubs.add(f); return () => tierSubs.delete(f); },
+    () => tierVer, () => tierVer);
+}
+/* المرتبة الحالية وما بعدها */
+export function tierAt(gems) {
+  let i = 0;
+  for (let k = 0; k < TIERS.length; k++) if (gems >= TIERS[k].g) i = k;
+  return { i, cur: TIERS[i], next: TIERS[i + 1] || null,
+           /* ما بلغه من الطريق إلى التالية */
+           p: TIERS[i + 1]
+              ? Math.min(1, (gems - TIERS[i].g) / Math.max(1, TIERS[i + 1].g - TIERS[i].g))
+              : 1 };
+}
+let TIERC = "#6BBFB2";          /* لون المرتبة — تقرؤه الأرض */
+
 export const LS_SOUND = "silla.sound.v1";
 const AUD = { ctx: null, master: null, on: true };
 let soundVer = 0;
@@ -401,6 +460,8 @@ export const SFX = {
   nav:   () => tone(N.do, { dur: .07, vol: .08, type: "sine" }),
   build: () => { tone(N.do * .5, { dur: .16, vol: .13, type: "triangle" });
                  tone(N.sol, { dur: .1, vol: .07, type: "sine", at: .04 }); },
+  rank:  () => [N.do, N.mi, N.sol, N.do2, N.mi2].forEach((f, i) =>
+                 tone(f, { dur: .42, vol: .15, type: "triangle", at: i * .11 })),
   save:  () => [N.do, N.mi, N.sol, N.do2].forEach((f, i) =>
                  tone(f, { dur: .22, vol: .13, type: "triangle", at: i * .085 })),
 };
@@ -681,7 +742,7 @@ const WALL=(function(){
 export const DRAW={};
 /* ── السور: طاردات الشيطان (٣٠ قطعة على المحيط) ── */
 DRAW.fort=(x,y,n)=>{
- const k=Math.min(n,30);
+ const k=Math.min(n,DCAP);
  /* تُرتَّب بالعمق فتحجب القطعُ القريبة ما خلفها */
  const seg=[];
  for(let i=0;i<k;i++){const[a,b,o]=WALL[i];seg.push({a,b,o,d:a+b})}
@@ -695,7 +756,7 @@ DRAW.fort=(x,y,n)=>{
  })};
 
 /* ── بيوت الرواتب: حيّ يصل ٣٠ بيتًا ── */
-DRAW.house=(x,y,n)=>{const k=Math.min(n,30);
+DRAW.house=(x,y,n)=>{const k=Math.min(n,DCAP);
  /* الشبكة في فضاء الأرض لا الشاشة، فتُسقَط صفوفًا مائلة كحيٍّ حقيقي.
     (x,y) الواصلان مُسقَطان أصلًا، فنستعيد مركز الحيّ من موضعه في SPOT. */
  const col={wallTop:DK()?'#CDBE92':'#F6EDD8',wallR:DK()?'#B5A57C':'#E4D7BB',
@@ -711,8 +772,8 @@ DRAW.house=(x,y,n)=>{const k=Math.min(n,30);
   X.fillStyle='#FFEBAE';X.fillRect(fx-14,fy-17,6,6);X.fillRect(fx+8,fy-17,6,6)})};
 
 /* ── المحراب: يعلو ويتعدّد ── */
-DRAW.mihrab=(x,y,n)=>{const k=Math.min(Math.ceil(n/6),5);if(!k)return;
- const [mx,my]=SPOT.mihrab,h=32+Math.min(n,30)*.7,half=k*16,dep=11;
+DRAW.mihrab=(x,y,n)=>{const k=Math.min(Math.ceil(n*5/DCAP),5);if(!k)return;
+ const [mx,my]=SPOT.mihrab,h=32+Math.min(n,DCAP)*.7,half=k*16,dep=11;
  isoBox(mx,my,half,dep,h,
   DK()?'#E4D0A0':'#F8EFDA',DK()?'#C2AD80':'#E0D3B4',DK()?'#9E8B62':'#C4B492');
  /* القناطر محفورة في الوجه الأمامي — قاعدة كلٍّ على حافّته المائلة */
@@ -726,11 +787,11 @@ DRAW.mihrab=(x,y,n)=>{const k=Math.min(Math.ceil(n/6),5);if(!k)return;
   X.fillStyle='rgba(255,255,255,.16)';X.fillRect(bx-w,by-h+15,2,h-15)}};
 
 /* ── المئذنة: ترتفع مع الأيام (سقف ٣٠) ── */
-DRAW.minaret=(x,y,n)=>{if(!n)return;const h=26+Math.min(n,30)*2.2;shadow(x,y,10,4);
+DRAW.minaret=(x,y,n)=>{if(!n)return;const h=26+Math.min(n,DCAP)*2.2;shadow(x,y,10,4);
  X.fillStyle=lit(x,y,16,DK()?'#E0CB96':'#F5EBD4',DK()?'#A08B5E':'#C2B08E');
  X.fillRect(x-7,y-h,14,h);
  X.fillStyle='rgba(255,255,255,.18)';X.fillRect(x-7,y-h,3,h);
- const rings=Math.floor(Math.min(n,30)/8);
+ const rings=Math.floor(Math.min(n,DCAP)/8);
  for(let k=1;k<=rings;k++){X.fillStyle=DK()?'#B8A176':'#D8C9A6';
   X.fillRect(x-10,y-h*k/(rings+1),20,4)}
  X.fillStyle=DK()?'#D4B570':'#C9A96A';X.beginPath();X.arc(x,y-h,8,Math.PI,0);X.fill();
@@ -738,7 +799,7 @@ DRAW.minaret=(x,y,n)=>{if(!n)return;const h=26+Math.min(n,30)*2.2;shadow(x,y,10,
  X.beginPath();X.arc(x,y-15-h,2.6,0,7);X.fill()};
 
 /* ── السجادة: تكبر مع الأيام ── */
-DRAW.rug=(x,y,n)=>{if(!n)return;const s=.5+Math.min(n,30)/30*1.6;
+DRAW.rug=(x,y,n)=>{if(!n)return;const s=.5+Math.min(n,DCAP)/DCAP*1.6;
  shadow(x,y,26*s,7*s,.14);
  const g=lit(x,y,54*s,DK()?'#A0576C':'#D08FA4',DK()?'#6E3A4C':'#A86478');
  X.fillStyle=g;X.beginPath();X.ellipse(x,y,27*s,10*s,0,0,7);X.fill();
@@ -765,7 +826,7 @@ DRAW.stream=(x,y,n)=>{
  X.beginPath();X.moveTo(pts[0][0],pts[0][1]);pts.forEach(p=>X.lineTo(p[0],p[1]));X.stroke();
  if(!n)return;
  const last=pts.length-1;
- const fill=Math.min(n,30)/30;
+ const fill=Math.min(n,DCAP)/DCAP;
  const at=last*fill;                       /* موضع كسريّ على المجرى */
  const seg=Math.max(0,Math.min(last-1,Math.floor(at)));
  const fr=Math.max(0,Math.min(1,at-seg));
@@ -787,7 +848,7 @@ DRAW.stream=(x,y,n)=>{
  X.restore()};
 
 /* ── النخيل: حتى ٣٠ ── */
-DRAW.palm=(x,y,n)=>{const k=Math.min(n,30);
+DRAW.palm=(x,y,n)=>{const k=Math.min(n,DCAP);
  plot('palm',k,6,30,27).forEach(({wx,wy,i})=>{
   const a=IX(wx,wy),b=IY(wx,wy),s=.58+((i*7)%3)*.07;
   shadow(a,b,9,3.4);
@@ -805,7 +866,7 @@ DRAW.palm=(x,y,n)=>{const k=Math.min(n,30);
   X.fillStyle=DK()?'#C98A3C':'#D9963C';
   X.beginPath();X.arc(a,b-38*s,2.6*s,0,7);X.fill()})};
 
-DRAW.garden=(x,y,n)=>{const k=Math.min(n*2,40);
+DRAW.garden=(x,y,n)=>{const k=Math.min(Math.round(n*40/DCAP),40);
  plot('garden',k,8,22,19).forEach(({wx,wy})=>{
   const a=IX(wx,wy),b=IY(wx,wy);
   X.strokeStyle=DK()?'#1E5C3A':'#2E7A4A';X.lineWidth=1.8;
@@ -813,63 +874,77 @@ DRAW.garden=(x,y,n)=>{const k=Math.min(n*2,40);
   canopy(a,b-11,7.2,DK()?'#5FBF87':'#84D9A4',DK()?'#215F3E':'#357F52')})};
 
 DRAW.dome=(x,y,n)=>{if(!n)return;
- /* قلب القرية: مسجدٌ كبير في وسط الصحن — أعلى ما فيها وأكثره تفصيلًا */
- const g=Math.min(n,30)/30,s=.62+g*.42;
+ /* قلب القرية. يُقرأ بالتراصّ: مصطبة ← بيت صلاة ← رقبة ظاهرة ← قبّة.
+    الرقبة أضيق من القبّة عمدًا، وإلا ابتلعتها القبّة فبدت على الهواء. */
+ const g=Math.min(n,DCAP)/DCAP,s=.66+g*.4;
  const [cx,cy]=SPOT.dome;
- const SX=46*s,SY=30*s;
+ const SX=44*s,SY=29*s;
  EXTENT.dome={x0:cx-SX,x1:cx+SX,y0:cy-SY,y1:cy+SY};
  const px=IX(cx,cy),py=IY(cx,cy);
+ const PH=8*s,HH=30*s,NH=19*s;                 /* مصطبة · بيت الصلاة · الرقبة */
+ const HW=SX*.8,HD=SY*.78;
 
- /* هالة النور — «قبة نور» */
- X.save();X.globalAlpha=(.14+g*.2)+Math.sin(ph*.9)*.06;
- const gl=X.createRadialGradient(px,py-74*s,0,px,py-74*s,132*s);
- gl.addColorStop(0,'#FFE9A8');gl.addColorStop(.5,'rgba(255,220,140,.28)');
+ /* هالة النور */
+ X.save();X.globalAlpha=(.13+g*.19)+Math.sin(ph*.9)*.05;
+ const gl=X.createRadialGradient(px,py-PH-HH-NH-20*s,0,px,py-PH-HH-NH-20*s,140*s);
+ gl.addColorStop(0,'#FFE9A8');gl.addColorStop(.5,'rgba(255,220,140,.26)');
  gl.addColorStop(1,'rgba(255,233,168,0)');
- X.fillStyle=gl;X.beginPath();X.arc(px,py-74*s,132*s,0,7);X.fill();X.restore();
+ X.fillStyle=gl;X.beginPath();X.arc(px,py-PH-HH-NH-20*s,140*s,0,7);X.fill();X.restore();
 
- const st={t:DK()?'#D6C79C':'#F6EEDA',r:DK()?'#B8A97F':'#E2D6BA',l:DK()?'#8C7E58':'#C0B291'};
- /* مصطبة عريضة */
- isoBox(cx,cy,SX,SY,7*s,DK()?'#C2B48C':'#E8DFC6',DK()?'#A2946E':'#D0C4A6',DK()?'#7E7254':'#AEA286');
+ const T=DK()?'#D8C99E':'#F7F0DC',R=DK()?'#B6A77D':'#E0D4B6',L=DK()?'#8A7C56':'#BCAE8C';
+ /* المصطبة */
+ isoBox(cx,cy,SX,SY,PH,DK()?'#C4B68E':'#EAE1C8',DK()?'#A49670':'#D2C6A8',DK()?'#807454':'#B0A488');
  /* بيت الصلاة */
- const HW=SX*.82,HD=SY*.78,HH=34*s;
- isoBox(cx,cy,HW,HD,HH,st.t,st.r,st.l,7*s);
- /* قناطر في الوجه الأمامي */
+ isoBox(cx,cy,HW,HD,HH,T,R,L,PH);
+ /* قناطر محفورة في الوجه الأمامي الغربيّ */
  for(let i=-1;i<=1;i++){
-  const wx=cx+i*HW*.56,bx=IX(wx,cy+HD),by=IY(wx,cy+HD)-7*s;
-  X.fillStyle=DK()?'#0E2620':'#3E5E4A';
-  X.beginPath();X.moveTo(bx-7*s,by);X.lineTo(bx-7*s,by-HH*.5);
-  X.quadraticCurveTo(bx,by-HH*.92,bx+7*s,by-HH*.5);X.lineTo(bx+7*s,by);X.closePath();X.fill();
+  const wx=cx+i*HW*.55;
+  const bx=IX(wx,cy+HD),by=IY(wx,cy+HD)-PH;
+  const aw=8*s,ah=HH*.74;
+  X.fillStyle=DK()?'#101F1A':'#33513F';
+  X.beginPath();X.moveTo(bx-aw,by);X.lineTo(bx-aw,by-ah*.52);
+  X.quadraticCurveTo(bx,by-ah,bx+aw,by-ah*.52);X.lineTo(bx+aw,by);X.closePath();X.fill();
   edge(1.1);
-  X.fillStyle='#FFEBAE';X.globalAlpha=.75;
-  X.beginPath();X.ellipse(bx,by-HH*.5,4*s,5*s,0,0,7);X.fill();X.globalAlpha=1}
- /* أبراج الأركان */
+  X.fillStyle='#FFE3A0';X.globalAlpha=.55;
+  X.beginPath();X.ellipse(bx,by-ah*.44,aw*.52,ah*.2,0,0,7);X.fill();X.globalAlpha=1}
+ /* أربعة أبراج في الأركان */
  [[-1,-1],[1,-1],[-1,1],[1,1]].forEach(([dx,dy])=>{
-  isoBox(cx+dx*HW*.94,cy+dy*HD*.94,5.5*s,5.5*s,HH*1.22,st.t,st.r,st.l,7*s);
-  const tx=IX(cx+dx*HW*.94,cy+dy*HD*.94),ty=IY(cx+dx*HW*.94,cy+dy*HD*.94)-7*s-HH*1.22;
-  X.fillStyle=DK()?'#D4B570':'#C9A96A';
-  X.beginPath();X.moveTo(tx-6*s,ty);X.lineTo(tx,ty-11*s);X.lineTo(tx+6*s,ty);X.closePath();X.fill();
-  edge(1)});
- /* رقبة القبّة */
- const DY=py-7*s-HH;
- isoBox(cx,cy,HW*.6,HD*.7,15*s,st.t,st.r,st.l,7*s+HH);
- const NY=DY-15*s;
- /* القبّة الذهبية */
- const R=HW*.66;
- const dg=X.createRadialGradient(px-R*.34,NY-R*.5,3,px,NY,R*1.15);
- dg.addColorStop(0,sat(DK()?'#F4E4B6':'#FBEFC4'));
- dg.addColorStop(.55,sat(DK()?'#D9B558':'#E3C168'));
- dg.addColorStop(1,sat(DK()?'#8E6E16':'#A07E28'));
- X.fillStyle=dg;
- X.beginPath();X.moveTo(px-R,NY);
- X.bezierCurveTo(px-R,NY-R*1.18,px+R,NY-R*1.18,px+R,NY);
- X.closePath();X.fill();edge(1.2);
- /* طوق القبّة */
+  const tw=5*s,twx=cx+dx*SX*.9,twy=cy+dy*SY*.86,TH=HH*1.34;
+  isoBox(twx,twy,tw,tw,TH,T,R,L,PH);
+  const tx=IX(twx,twy),ty=IY(twx,twy)-PH-TH;
+  X.fillStyle=sat(DK()?'#C9A54A':'#D8B45E');
+  X.beginPath();X.moveTo(tx-tw*1.5,ty);
+  X.bezierCurveTo(tx-tw*1.5,ty-tw*2.4,tx+tw*1.5,ty-tw*2.4,tx+tw*1.5,ty);
+  X.closePath();X.fill();edge(1)});
+ /* الرقبة — ضيّقة وعالية فتظهر تحت القبّة */
+ const NW=SX*.34;
+ isoBox(cx,cy,NW,SY*.34,NH,T,R,L,PH+HH);
+ const NY=py-PH-HH-NH;
+ /* نوافذ الرقبة */
+ X.fillStyle='#FFE3A0';
+ [-1,0,1].forEach((i)=>{const wx2=IX(cx+i*NW*.5,cy+SY*.34);
+  X.globalAlpha=.7;X.beginPath();X.ellipse(wx2,NY+NH*.5,2.4*s,4.4*s,0,0,7);X.fill()});
+ X.globalAlpha=1;
+ /* طوق القبّة ثم القبّة */
+ const RR=NW*1.5;
  X.fillStyle=sat(DK()?'#B8922E':'#C9A54A');
- X.beginPath();X.ellipse(px,NY,R,R*.24,0,0,7);X.fill();edge(1);
- /* الهلال */
- X.fillStyle=DK()?'#E5CF9A':'#D8B45E';
- X.fillRect(px-1.8*s,NY-R*1.18-15*s,3.6*s,16*s);
- X.beginPath();X.arc(px,NY-R*1.18-18*s,4.6*s,0,7);X.fill();edge(1)};
+ X.beginPath();X.ellipse(px,NY,RR*1.06,RR*.26,0,0,7);X.fill();edge(1.2);
+ const dg=X.createRadialGradient(px-RR*.36,NY-RR*.62,3,px,NY,RR*1.25);
+ dg.addColorStop(0,sat(DK()?'#F6E8BE':'#FCF2CC'));
+ dg.addColorStop(.5,sat(DK()?'#DCB95E':'#E8C874'));
+ dg.addColorStop(1,sat(DK()?'#8C6C14':'#A88232'));
+ X.fillStyle=dg;
+ X.beginPath();X.moveTo(px-RR,NY);
+ X.bezierCurveTo(px-RR,NY-RR*1.34,px+RR,NY-RR*1.34,px+RR,NY);
+ X.closePath();X.fill();edge(1.4);
+ /* الصاري والهلال */
+ const FY=NY-RR*1.0;
+ X.strokeStyle=sat(DK()?'#E5CF9A':'#C9A54A');X.lineWidth=2.6*s;X.lineCap='round';
+ X.beginPath();X.moveTo(px,FY);X.lineTo(px,FY-16*s);X.stroke();
+ X.fillStyle=sat(DK()?'#E5CF9A':'#D8B45E');
+ X.beginPath();
+ X.arc(px,FY-21*s,5.4*s,0,7);X.arc(px+2.4*s,FY-22.4*s,4.6*s,0,7);
+ X.fill('evenodd');edge(1)};
 
 DRAW.sundial=(x,y,n)=>{if(!n)return;shadow(x,y,14,5);
  X.fillStyle=lit(x,y,26,DK()?'#B8AA88':'#DCD2B4',DK()?'#7E735A':'#A89A78');
@@ -878,7 +953,7 @@ DRAW.sundial=(x,y,n)=>{if(!n)return;shadow(x,y,14,5);
  X.fillStyle=DK()?'#D4B570':'#B99442';X.beginPath();
  X.moveTo(x,y-6);X.lineTo(x+3,y-20);X.lineTo(x+6,y-6);X.fill()};
 
-DRAW.gate=(x,y,n)=>{if(!n)return;const s=.7+Math.min(n,30)/30*.5;
+DRAW.gate=(x,y,n)=>{if(!n)return;const s=.7+Math.min(n,DCAP)/DCAP*.5;
  const [gx,gy]=SPOT.gate,w=24*s,dep=13*s,h=48*s;
  isoBox(gx,gy,w,dep,h,
   DK()?'#E4D0A0':'#F6ECD6',DK()?'#C2AD80':'#DED0AE',DK()?'#9C8A63':'#C0AE8C');
@@ -891,14 +966,14 @@ DRAW.gate=(x,y,n)=>{if(!n)return;const s=.7+Math.min(n,30)/30*.5;
  isoBox(gx,gy,w*1.08,dep*1.08,5*s,DK()?'#EFDCAC':'#FBF3E2',
   DK()?'#C2AD80':'#DED0AE',DK()?'#9C8A63':'#C0AE8C',h)};
 
-DRAW.pattern=(x,y,n)=>{if(!n)return;const k=Math.min(n,30);
+DRAW.pattern=(x,y,n)=>{if(!n)return;const k=Math.min(n,DCAP);
  X.fillStyle=DK()?'rgba(212,181,112,.15)':'rgba(185,148,66,.12)';
  X.fillRect(x-70,y-14,140,14);
  X.strokeStyle=DK()?'#D4B570':'#B99442';X.lineWidth=1.4;
  for(let i=0;i<Math.min(k,10);i++){const a=x-63+i*14;X.beginPath();
   X.moveTo(a,y-7);X.lineTo(a+6,y-13);X.lineTo(a+12,y-7);X.lineTo(a+6,y-1);X.closePath();X.stroke()}};
 
-DRAW.fountain=(x,y,n)=>{const k=Math.min(Math.ceil(n/4),8);
+DRAW.fountain=(x,y,n)=>{const k=Math.min(Math.ceil(n*8/DCAP),8);
  plot('fountain',k,4,50,42).forEach(({wx,wy})=>{
   const a=IX(wx,wy),b=IY(wx,wy);
   shadow(a,b,20,7);
@@ -918,16 +993,16 @@ DRAW.fountain=(x,y,n)=>{const k=Math.min(Math.ceil(n/4),8);
   [-1,1].forEach(d=>{X.beginPath();X.moveTo(a,b-25);
    X.quadraticCurveTo(a+d*11,b-33,a+d*15,b-14);X.stroke()})})};
 
-DRAW.arak=(x,y,n)=>{const k=Math.min(Math.ceil(n/3),10);
+DRAW.arak=(x,y,n)=>{const k=Math.min(Math.ceil(n*10/DCAP),10);
  plot('arak',k,5,34,28).forEach(({wx,wy})=>{
-  const a=IX(wx,wy),b=IY(wx,wy),s=.78+Math.min(n,30)/30*.3;
+  const a=IX(wx,wy),b=IY(wx,wy),s=.78+Math.min(n,DCAP)/DCAP*.3;
   shadow(a,b,10,3.6);
   trunk(a,b,3.2*s,19*s,DK()?'#7E5A38':'#A87C4E',DK()?'#4A3220':'#6B4A2A');
   canopy(a-7.5*s,b-21*s,8.4*s,DK()?'#3E9E6E':'#5CBE86',DK()?'#1A5C38':'#2C7A4C');
   canopy(a+7.5*s,b-21*s,8.4*s,DK()?'#3E9E6E':'#5CBE86',DK()?'#1A5C38':'#2C7A4C');
   canopy(a,b-27*s,12*s,DK()?'#4FB37C':'#6FD49A',DK()?'#1E6B42':'#338354')})};
 
-DRAW.bighouse=(x,y,n)=>{if(!n)return;const s=.62+Math.min(n,30)/30*.45;
+DRAW.bighouse=(x,y,n)=>{if(!n)return;const s=.62+Math.min(n,DCAP)/DCAP*.45;
  const [bx,by]=SPOT.bighouse;
  const col={wallTop:DK()?'#D8C99C':'#F8F0DC',wallR:DK()?'#BFAF84':'#E8DCC0',
             wallL:DK()?'#96865F':'#CCBC9A',
@@ -939,7 +1014,7 @@ DRAW.bighouse=(x,y,n)=>{if(!n)return;const s=.62+Math.min(n,30)/30*.45;
  X.fillStyle='#FFEBAE';
  X.fillRect(fx-26*s,fy-28*s,9*s,8*s);X.fillRect(fx+17*s,fy-28*s,9*s,8*s)};
 
-DRAW.bridge=(x,y,n)=>{if(!n)return;const s=.7+Math.min(n,30)/30*.4;
+DRAW.bridge=(x,y,n)=>{if(!n)return;const s=.7+Math.min(n,DCAP)/DCAP*.4;
  shadow(x,y+6,38*s,7*s,.14);
  const g=X.createLinearGradient(0,y-26*s,0,y);
  g.addColorStop(0,DK()?'#A0764C':'#C89A5E');g.addColorStop(1,DK()?'#6B4A2A':'#8A6440');
@@ -951,7 +1026,7 @@ DRAW.bridge=(x,y,n)=>{if(!n)return;const s=.7+Math.min(n,30)/30*.4;
  X.strokeStyle=DK()?'#A0764C':'#C89A5E';X.lineWidth=2.2*s;
  X.beginPath();X.moveTo(x-44*s,y-13*s);X.quadraticCurveTo(x,y-42*s,x+44*s,y-13*s);X.stroke()};
 
-DRAW.tent=(x,y,n)=>{const k=Math.min(Math.ceil(n/4),8);
+DRAW.tent=(x,y,n)=>{const k=Math.min(Math.ceil(n*8/DCAP),8);
  plot('tent',k,4,38,34,false,-22,-46).forEach(({wx,wy})=>{
   const a=IX(wx,wy),b=IY(wx,wy);
   shadow(a,b,21,7);
@@ -983,7 +1058,7 @@ DRAW.flower=(x,y,n)=>{const FCL=['#E8657F','#F2C14E','#B87FD0','#6FD08C','#F28E4
    X.beginPath();X.ellipse(fx2+Math.cos(ang)*3.2,b-13+Math.sin(ang)*3.2*IZ,2.6,2,ang,0,7);X.fill()}
   X.fillStyle='#FFF3C4';X.beginPath();X.arc(fx2,b-13,1.6,0,7);X.fill()})};
 
-DRAW.path=(x,y,n)=>{const k=Math.min(n,30);
+DRAW.path=(x,y,n)=>{const k=Math.min(n,DCAP);
  const [cx,cy]=SPOT.path;
  const pts=[];
  for(let i=0;i<k;i++){const wx=cx-78+i*5.4,wy=cy+Math.sin(i*.42)*13;pts.push({wx,wy})}
@@ -994,9 +1069,9 @@ DRAW.path=(x,y,n)=>{const k=Math.min(n,30);
   X.fillStyle=lit(a,b,14,DK()?'#5E7068':'#EBE1C6',DK()?'#3A4A44':'#C6BA9C');
   X.beginPath();X.ellipse(a,b,7,7*IZ,-.42+Math.sin(i)*.2,0,7);X.fill()})};
 
-DRAW.fruit=(x,y,n)=>{const k=Math.min(Math.ceil(n/4),8);
+DRAW.fruit=(x,y,n)=>{const k=Math.min(Math.ceil(n*8/DCAP),8);
  plot('fruit',k,4,44,32).forEach(({wx,wy})=>{
-  const a=IX(wx,wy),b=IY(wx,wy),s=.72+Math.min(n,30)/30*.32;
+  const a=IX(wx,wy),b=IY(wx,wy),s=.72+Math.min(n,DCAP)/DCAP*.32;
   shadow(a,b,12,4.4);
   trunk(a,b,4*s,20*s,DK()?'#7E5A38':'#A87C4E',DK()?'#4A3220':'#6B4A2A');
   canopy(a-9*s,b-23*s,10*s,DK()?'#3E9E6E':'#5CBE86',DK()?'#1A5C38':'#2C7A4C');
@@ -1006,7 +1081,7 @@ DRAW.fruit=(x,y,n)=>{const k=Math.min(Math.ceil(n/4),8);
    X.fillStyle='#E0566E';X.beginPath();X.arc(a+px*s,b+q*s,3*s,0,7);X.fill();
    X.fillStyle='rgba(255,255,255,.4)';X.beginPath();X.arc(a+px*s-1,b+q*s-1,1,0,7);X.fill()})})};
 
-DRAW.spring=(x,y,n)=>{if(!n)return;const s=.62+Math.min(n,30)/30*.42;shadow(x,y,24*s,7*s,.14);
+DRAW.spring=(x,y,n)=>{if(!n)return;const s=.62+Math.min(n,DCAP)/DCAP*.42;shadow(x,y,24*s,7*s,.14);
  X.fillStyle=lit(x,y,52*s,DK()?'#7E948C':'#B4C4BC',DK()?'#43605A':'#84968C');
  X.beginPath();X.ellipse(x,y,26*s,10*s,0,0,7);X.fill();
  const g=X.createRadialGradient(x-6*s,y-4,2,x,y-2,20*s);
@@ -1016,7 +1091,7 @@ DRAW.spring=(x,y,n)=>{if(!n)return;const s=.62+Math.min(n,30)/30*.42;shadow(x,y,
   X.strokeStyle=`rgba(230,250,255,${(1-rr/(23*s))*.55})`;X.lineWidth=1.1;
   X.beginPath();X.ellipse(x,y-2,rr,rr*.38,0,0,7);X.stroke()}};
 
-DRAW.lamp=(x,y,n)=>{const k=Math.min(n,30);
+DRAW.lamp=(x,y,n)=>{const k=Math.min(n,DCAP);
  plot('lamp',k,10,22,24,false,-10,26).forEach(({wx,wy,i})=>{
   const a=IX(wx,wy),b=IY(wx,wy);
   shadow(a,b,5,2);
@@ -1029,7 +1104,7 @@ DRAW.lamp=(x,y,n)=>{const k=Math.min(n,30);
   X.moveTo(a-6,b-29);X.lineTo(a+6,b-29);X.lineTo(a+4,b-37);X.lineTo(a-4,b-37);X.closePath();X.fill();
   X.fillStyle='#FFF3C4';X.beginPath();X.arc(a,b-33,3.8,0,7);X.fill()})};
 
-DRAW.well=(x,y,n)=>{if(!n)return;const s=.62+Math.min(n,30)/30*.4;shadow(x,y,18*s,5*s);
+DRAW.well=(x,y,n)=>{if(!n)return;const s=.62+Math.min(n,DCAP)/DCAP*.4;shadow(x,y,18*s,5*s);
  X.fillStyle=lit(x,y,40*s,DK()?'#8E9E96':'#C4CEC4',DK()?'#4E625C':'#8E9C92');
  X.fillRect(x-20*s,y-19*s,40*s,19*s);
  for(let r=0;r<2;r++)for(let c=0;c<4;c++){X.strokeStyle='rgba(0,0,0,.13)';X.lineWidth=1;
@@ -1042,7 +1117,7 @@ DRAW.well=(x,y,n)=>{if(!n)return;const s=.62+Math.min(n,30)/30*.4;shadow(x,y,18*
  X.strokeStyle=DK()?'#5E4530':'#7A5A3A';X.lineWidth=2.4*s;
  X.beginPath();X.moveTo(x-15*s,y-38*s);X.lineTo(x,y-46*s);X.lineTo(x+15*s,y-38*s);X.stroke()};
 
-DRAW.crescent=(x,y,n)=>{if(!n)return;const s=.55+Math.min(n,30)/30*.6;X.save();
+DRAW.crescent=(x,y,n)=>{if(!n)return;const s=.55+Math.min(n,DCAP)/DCAP*.6;X.save();
  X.globalAlpha=.4;const g=X.createRadialGradient(x,y,0,x,y,50*s);
  g.addColorStop(0,'rgba(255,243,196,.55)');g.addColorStop(1,'rgba(255,243,196,0)');
  X.fillStyle=g;X.beginPath();X.arc(x,y,50*s,0,7);X.fill();X.globalAlpha=1;
@@ -1054,8 +1129,8 @@ DRAW.crescent=(x,y,n)=>{if(!n)return;const s=.55+Math.min(n,30)/30*.6;X.save();
  if(GS()){X.strokeStyle=OUT();X.lineWidth=1.1/ZOOM;X.lineJoin='round';X.stroke()}
  X.restore()};
 
-DRAW.shieldL=(x,y,n)=>{if(!n)return;const s=.6+Math.min(n,30)/30*.55;X.save();
- X.globalAlpha=(.2+Math.min(n,30)/30*.2)+Math.sin(ph)*.07;
+DRAW.shieldL=(x,y,n)=>{if(!n)return;const s=.6+Math.min(n,DCAP)/DCAP*.55;X.save();
+ X.globalAlpha=(.2+Math.min(n,DCAP)/DCAP*.2)+Math.sin(ph)*.07;
  const g=X.createLinearGradient(x,y-40*s,x,y+10*s);
  g.addColorStop(0,DK()?'#8FD3C8':'#6BBFB2');g.addColorStop(1,'rgba(107,191,178,.08)');
  X.fillStyle=g;X.beginPath();X.moveTo(x,y-42*s);X.lineTo(x+24*s,y-30*s);X.lineTo(x+24*s,y-11*s);
@@ -1063,7 +1138,7 @@ DRAW.shieldL=(x,y,n)=>{if(!n)return;const s=.6+Math.min(n,30)/30*.55;X.save();
  X.globalAlpha=.55;X.strokeStyle=DK()?'#A8E4DA':'#8FD3C8';X.lineWidth=2.2;X.stroke();X.restore()};
 
 /* سياج النور: يحيط بالجنّة داخل السور */
-DRAW.fence=(x,y,n)=>{if(!n)return;const k=Math.min(n,30);X.save();
+DRAW.fence=(x,y,n)=>{if(!n)return;const k=Math.min(n,DCAP);X.save();
  X.globalAlpha=.22+Math.min(k,30)/30*.18+Math.sin(ph*1.2)*.06;
  X.strokeStyle=DK()?'#8FD3C8':'#6BBFB2';X.lineWidth=2.4;X.lineCap='round';
  const raw=[],x0=IN.x+8,y0=IN.y+8,x1=IN.x+IN.w-8,y1=IN.y+IN.h-8;
@@ -1388,9 +1463,10 @@ function ground() {
   birka(535, 420, 40);
 
   /* ── الحدّ الذهبي المتقطّع — §٥: يبيّن المساحة كاملة من اليوم الأول ── */
-  X.save(); X.setLineDash([9, 7]); X.lineWidth = 2.4;
-  X.strokeStyle = dk ? "rgba(212,181,112,.42)" : "rgba(185,148,66,.5)";
-  X.strokeRect(IN.x - 14, IN.y - 14, IN.w + 28, IN.h + 28); X.restore();
+  X.save(); X.setLineDash([9, 7]); X.lineWidth = 3.2;
+  X.strokeStyle = TIERC;  X.globalAlpha = .55;
+  X.strokeRect(IN.x - 14, IN.y - 14, IN.w + 28, IN.h + 28);
+  X.globalAlpha = 1; X.restore();
 
   /* ── ما يقف على الأرض من زينة: يُرفع التحويل ويُرسم منتصبًا عند موضعه ──
      كلّه في صورة الأرض المخزّنة، فلا يكلّف إطارًا واحدًا من الحركة. */
@@ -1480,19 +1556,32 @@ function drawPlayer(src, px, py) {
 /* ════════════════════════════════════════════════════════════════════
    <Village/> — المشهد: تجوّل · سلايدر الأيام · معاينة اليوم ٣٠
    ════════════════════════════════════════════════════════════════════ */
+const LS_RANK = "silla.rank.v1";
+
 export function Village({ st, theme = "light" }) {
   useSunanVersion();
   useSkin();
+  useTiers();
   const { tally, allGems, monthGems, start, setStart, days } = st;
   const cvRef = useRef(null);
   const stageRef = useRef(null);
   const padRef = useRef(null);
   const [viewDay, setViewDay] = useState(days.length);
   const [preview, setPreview] = useState(false);
+  const [full, setFull] = useState(false);       /* المشهد يملأ الشاشة */
+  const fullRef = useRef(false);
   const [near, setNear] = useState(null);
 
   /* عند تبديل الشهر: اعرضه كاملًا */
   useEffect(() => { setViewDay(days.length); }, [days.length, start]);
+  useEffect(() => {
+    if (!full) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const esc = (e) => { if (e.key === "Escape") { fullRef.current = false; setFull(false); } };
+    window.addEventListener("keydown", esc);
+    return () => { document.body.style.overflow = prev; window.removeEventListener("keydown", esc); };
+  }, [full]);
 
   const P = useRef({ x: W / 2, y: H * .62, s: 2.4, f: 0, mv: 0 });
   const cam = useRef({ x: W / 2, y: H * .55 });
@@ -1503,15 +1592,31 @@ export function Village({ st, theme = "light" }) {
   const tapAt = useRef(null);
   const selRef = useRef(null);      /* ما هو مختار الآن — تقرؤه حلقة الرسم */
   const [tapped, setTapped] = useState(null);            /* البناء المفتوحة بطاقته */
-  const prevN = useRef(null);      /* عدد الأبنية في الإطار السابق */
+  const prevN = { get current() { return LASTN.v; }, set current(v) { LASTN.v = v; } };
   const pops = useRef({});         /* ما يقفز الآن */
   const dust = useRef([]);         /* نُفَخ الغبار الحيّة */
   const lastBoom = useRef(0);
+  const capRef = useRef(30);
 
   useEffect(() => { DKMODE = theme === "dark"; }, [theme]);
 
   /* الأبنية تُحسب عند تغيّر السجلّ أو اليوم فقط — لا في كل إطار */
   const cap = days.length;                     /* الشهر ٢٩ أو ٣٠ يومًا */
+  capRef.current = cap;
+
+  /* المرتبة: تلوّن حدّ الأرض، ويُحتفى ببلوغ عتبةٍ جديدة */
+  const rank = tierAt(allGems);
+  TIERC = rank.cur.c;
+  const [rankUp, setRankUp] = useState(null);
+  useEffect(() => {
+    let seen = -1;
+    try { seen = parseInt(window.localStorage.getItem(LS_RANK), 10); } catch (e) { /* تجاهل */ }
+    if (!Number.isFinite(seen)) seen = -1;
+    if (rank.i > seen) {
+      try { window.localStorage.setItem(LS_RANK, String(rank.i)); } catch (e) { /* تجاهل */ }
+      if (seen >= 0) { setRankUp(rank.cur); SFX.rank(); }
+    }
+  }, [rank.i]);
   const builds = useMemo(() => tally(viewDay, preview), [tally, viewDay, preview]);
   const bRef = useRef(builds);
   useEffect(() => { bRef.current = builds; }, [builds]);
@@ -1522,7 +1627,11 @@ export function Village({ st, theme = "light" }) {
     if (!cv || !box) return;
     const fit = () => {
       const d = Math.min(window.devicePixelRatio || 1, 2);
-      const w = box.clientWidth || 470, h = Math.round(w * 0.766);
+      const w = box.clientWidth || 470;
+      /* الارتفاع من نافذة المتصفّح لا من الحاوية — الحاوية تكبر بكبر اللوحة
+         فتصير حلقةً تتضخّم كل مرّة يُعاد فيها القياس. */
+      const h = fullRef.current ? Math.round(window.innerHeight)
+                                : Math.round(w * 0.766);
       dpr.current = d;
       cv.style.width = w + "px"; cv.style.height = h + "px";
       cv.width = Math.round(w * d); cv.height = Math.round(h * d);
@@ -1572,6 +1681,7 @@ export function Village({ st, theme = "light" }) {
     let raf;
     const loop = () => {
       const t = bRef.current;
+      DCAP = capRef.current;
       const d = dpr.current;
       const cw = cv.width / d, ch = cv.height / d;      /* بكسلات CSS */
       const vw = cw / ZOOM, vh = ch / ZOOM;             /* ما يُرى من الأرض */
@@ -1758,29 +1868,41 @@ export function Village({ st, theme = "light" }) {
         </div>
       </div>
 
+      {/* المرتبة وما بقي إلى التي بعدها */}
+      <div style={{ ...S.rankRow, borderColor: rank.cur.c }}>
+        <div style={{ ...S.rankB, background: rank.cur.c }}>{rank.cur.n}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={S.rankBar}>
+            <div style={{ ...S.rankFill, width: `${Math.round(rank.p * 100)}%`,
+                          background: rank.cur.c }} />
+          </div>
+          <div style={S.rankT}>
+            {rank.next
+              ? `${fmt(Math.max(0, rank.next.g - allGems))} جوهرة إلى «${rank.next.n}»`
+              : "بلغتَ أعلى المراتب"}
+          </div>
+        </div>
+      </div>
+
       {/* شريط الشهر — الجنّة تتبدّل بتبدّله */}
       <MonthBar start={start} setStart={setStart} sub={`${fmt(monthGems)} جوهرة هذا الشهر`} />
 
-      <div style={S.stage} ref={stageRef}>
+      <div style={{ ...S.stage, ...(full ? S.stageFull : {}) }} ref={stageRef}>
+        <button style={S.fullB} aria-label={full ? "إنهاء ملء الشاشة" : "ملء الشاشة"}
+          onClick={() => { SFX.nav(); fullRef.current = !full; setFull(!full); }}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+            strokeLinecap="round" strokeLinejoin="round" style={{ width: 17, height: 17 }}>
+            {full ? <><path d="M9 3v6H3" /><path d="M15 21v-6h6" /><path d="M21 9h-6V3" /><path d="M3 15h6v6" /></>
+                  : <><path d="M3 9V3h6" /><path d="M21 15v6h-6" /><path d="M15 3h6v6" /><path d="M9 21H3v-6" /></>}
+          </svg>
+        </button>
         <canvas ref={cvRef} style={{ display: "block", width: "100%" }}
           onPointerDown={(e) => {
-            tapAt.current = { x: e.clientX, y: e.clientY, px: e.clientX, py: e.clientY, on: true };
-            e.currentTarget.setPointerCapture?.(e.pointerId);
-          }}
-          onPointerMove={(e) => {
-            const d0 = tapAt.current; if (!d0 || !d0.on) return;
-            /* السحب يجرّ الأرض تحت الإصبع — أقرب إلى ألعاب القرى من المقبض */
-            const dpx = (e.clientX - d0.px) / ZOOM, dpy = (e.clientY - d0.py) / ZOOM;
-            d0.px = e.clientX; d0.py = e.clientY;
-            if (Math.hypot(e.clientX - d0.x, e.clientY - d0.y) < 6) return;
-            const u = -dpx / IK, v = -dpy / (IK * IZ);
-            P.current.x = Math.max(IN.x - 20, Math.min(IN.x + IN.w + 20, P.current.x + (u + v) / 2));
-            P.current.y = Math.max(IN.y - 10, Math.min(IN.y + IN.h + 20, P.current.y + (v - u) / 2));
+            tapAt.current = { x: e.clientX, y: e.clientY };
           }}
           onPointerUp={(e) => {
             const d0 = tapAt.current;
-            if (d0) d0.on = false;
-            /* إصبعٌ زحف = تحريك المشهد، لا اختيار */
+            /* إصبعٌ زحف = تمرير الصفحة، لا اختيار */
             if (!d0 || Math.hypot(e.clientX - d0.x, e.clientY - d0.y) > 10) return;
             const r = e.currentTarget.getBoundingClientRect();
             const v = view.current;
@@ -1816,6 +1938,18 @@ export function Village({ st, theme = "light" }) {
             <div style={S.zn}>{near.b} · {ar(near.days)} من {ar(cap)}</div>
             <div style={S.zh}>{near.n}</div>
           </div>
+        )}
+        {rankUp && (
+          <Overlay onClose={() => setRankUp(null)} z={95}>
+            <div style={{ textAlign: "center" }}>
+              <div style={S.lbl}>ترقّت جنّتك</div>
+              <div style={{ ...S.rankBig, color: rankUp.c }}>{rankUp.n}</div>
+              <div style={{ ...S.rankRing, borderColor: rankUp.c }} />
+              <div style={S.dlgH}>{rankUp.d}</div>
+              <button style={{ ...S.dlgX, background: rankUp.c }}
+                onClick={() => setRankUp(null)}>الحمد لله</button>
+            </div>
+          </Overlay>
         )}
         {tapped && (
           <div data-card style={S.card}
@@ -1918,6 +2052,7 @@ export function Recorder({ st, onSave }) {
   const stripRef = useRef(null);
   const [pops, setPops] = useState([]);       /* جواهر تطير من الكرت المضغوط */
   const popId = useRef(0);
+  useEffect(() => () => setPops([]), []);
 
   /* لمسة على سنّة: سجّلها وأطلق جوهرتها */
   const press = (i, e) => {
@@ -1927,9 +2062,20 @@ export function Recorder({ st, onSave }) {
     if (wasDone && i.type === "bool") return;              /* إلغاء — لا جوهرة */
     if (i.type === "cycle" && v >= i.max) return;
     const box = e.currentTarget.getBoundingClientRect();
-    const id = ++popId.current;
-    setPops((L) => [...L, { id, g: i.g, c: i.c, x: box.left + box.width / 2, y: box.top + 14 }]);
-    setTimeout(() => setPops((L) => L.filter((q) => q.id !== id)), 900);
+    const now = Date.now();
+    setPops((L) => {
+      /* ضغطتان متتاليتان على السنّة نفسها تُجمعان: ١ ثم ٢ ثم ٣، لا ثلاث «١» */
+      const j = L.findIndex((q) => q.k === i.k && now - q.at < 800);
+      if (j >= 0) {
+        const c = L.slice();
+        c[j] = { ...c[j], g: c[j].g + i.g, hits: c[j].hits + 1, at: now, bump: c[j].bump + 1 };
+        return c;
+      }
+      const id = ++popId.current;
+      setTimeout(() => setPops((M) => M.filter((q) => q.id !== id)), 1100);
+      return [...L, { id, k: i.k, g: i.g, hits: 1, bump: 0, at: now, c: i.c,
+                      x: box.left + box.width / 2, y: box.top + 14 }];
+    });
   };
   const quickLeft = QUICK().filter((i) => !isDone(i, day[i.k] || 0)).length;
   const sel = fromIso(dayKey);
@@ -2138,8 +2284,10 @@ export function Recorder({ st, onSave }) {
 
       {/* الجواهر تطير صاعدةً من الكرت */}
       {pops.map((q) => (
-        <div key={q.id} className="sp-pop" style={{ ...S.pop, left: q.x, top: q.y, color: q.c }}>
-          {ar(q.g)} 💎
+        <div key={q.id + "-" + q.bump} className="sp-pop"
+          style={{ ...S.pop, left: q.x, top: q.y, color: q.c,
+                   fontSize: 15 + Math.min(q.hits - 1, 4) * 2.5 }}>
+          {ar(q.g)} 💎{q.hits > 1 ? ` ×${ar(q.hits)}` : ""}
         </div>
       ))}
 
@@ -2288,15 +2436,17 @@ const BUILD_AR = {};
 DEFAULT_SECS.forEach((s) => s.items.forEach((i) => { BUILD_AR[i.i] = i.b; }));
 
 /* حقل رقمي بأرقام عربية — §١٠ لا حروف ولا أرقام لاتينية في الواجهة */
-function NumField({ value, min, max, onChange, unit }) {
+function NumField({ value, min, max, onChange, unit, step, label }) {
+  const k = step || 1;
+  const of = label ? ` ${label}` : "";
   const set = (v) => onChange(Math.max(min, Math.min(max, v)));
   return (
     <div style={S.edNum}>
-      <button style={S.edNumB} onClick={() => set(value - 1)}
-        disabled={value <= min} aria-label="أنقص">−</button>
+      <button style={S.edNumB} onClick={() => set(value - k)}
+        disabled={value <= min || !k} aria-label={"أنقص" + of}>−</button>
       <span style={S.edNumV}>{ar(value)}{unit ? ` ${unit}` : ""}</span>
-      <button style={S.edNumB} onClick={() => set(value + 1)}
-        disabled={value >= max} aria-label="زد">+</button>
+      <button style={S.edNumB} onClick={() => set(value + k)}
+        disabled={value >= max || !k} aria-label={"زد" + of}>+</button>
     </div>
   );
 }
@@ -2309,6 +2459,7 @@ const uniqKey = (base, taken) => {
 
 export function SunanEditor({ embedded = false }) {
   useSunanVersion();
+  useTiers();
   const [editKey, setEditKey] = useState(null);    // مفتاح السنّة المفتوحة
   const [secEdit, setSecEdit] = useState(null);    // معرّف القسم المفتوح
   const [out, setOut] = useState(null);
@@ -2366,6 +2517,17 @@ export function SunanEditor({ embedded = false }) {
                      type: "bool", g: 2, h: "اكتب هنا الحديث أو الفضل الذي يظهر عند علامة الاستفهام." });
     });
     setEditKey(k);
+  };
+
+  /* ── المراتب ── */
+  const patchTier = (id, f, v) =>
+    setTiers(TIERS.map((t) => (t.id === id ? { ...t, [f]: v } : t)));
+  const addTier = () => {
+    const top = TIERS[TIERS.length - 1];
+    setTiers([...TIERS, { id: uniqKey("tier", new Set(TIERS.map((t) => t.id))),
+                          n: "مرتبة جديدة", g: (top ? top.g : 0) + 500,
+                          c: SEC_PALETTE[TIERS.length % SEC_PALETTE.length],
+                          d: "بلغتَ مرتبةً جديدة." }]);
   };
 
   /* ── تعديلات القسم ── */
@@ -2523,10 +2685,58 @@ export function SunanEditor({ embedded = false }) {
         </div>
       ))}
 
-      <button style={{ ...S.navBtn, width: "100%", color: "var(--sp-mut)" }}
-        onClick={() => setAsk({ msg: "استعادة السنن الأصلية ٢٦ وإلغاء كل تعديلاتك؟", onYes: resetSunan })}>
-        استعادة الأصل
-      </button>
+      {/* ── المراتب: عتباتُ الجواهر وما يتبدّل عندها ── */}
+      <div style={{ ...S.head, marginTop: 22 }}>
+        <div>
+          <div style={S.h1}>المراتب</div>
+          <div style={S.sub}>يبلغ الطالب العتبة فتترقّى جنّته ويتبدّل لونها</div>
+        </div>
+        <button style={S.edBtn} onClick={addTier}>＋ مرتبة</button>
+      </div>
+
+      <div style={S.edTip}>
+        الجواهر عددٌ يكبر بلا أثر. والمرتبة تجعل له اسمًا يُنادى به ولونًا
+        يصبغ حدّ الأرض — فيرى الطالب تقدّمه في جنّته لا في رقمٍ فقط.
+      </div>
+
+      {TIERS.map((t, ti) => (
+        <div key={t.id} style={S.aSec}>
+          <div style={S.aSecH}>
+            <span style={{ ...S.aDotC, background: t.c }} />
+            <input value={t.n} style={S.edSecName} aria-label="اسم المرتبة"
+              onChange={(e) => patchTier(t.id, "n", e.target.value)} />
+            <button style={S.edMini} aria-label="حذف المرتبة"
+              disabled={TIERS.length < 2}
+              onClick={() => setAsk({ msg: `حذف مرتبة «${t.n}»؟`,
+                onYes: () => setTiers(TIERS.filter((q) => q.id !== t.id)) })}>✕</button>
+          </div>
+          <div style={S.aLbl}>عتبة الجواهر</div>
+          <NumField value={t.g} min={0} max={99999} step={ti === 0 ? 0 : 50}
+            label={`عتبة «${t.n}»`} onChange={(v) => patchTier(t.id, "g", v)} />
+          <div style={S.aLbl}>ما يُقال عند بلوغها</div>
+          <textarea value={t.d} rows={2} style={S.aArea}
+            onChange={(e) => patchTier(t.id, "d", e.target.value)} />
+          <div style={S.aLbl}>لونها — يصبغ حدّ أرض الجنّة</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {SEC_PALETTE.map((c) => (
+              <button key={c} onClick={() => patchTier(t.id, "c", c)} aria-label={c}
+                style={{ ...S.edSwatch, background: c,
+                  ...(t.c === c ? { outline: "2px solid var(--sp-txt)", outlineOffset: 2 } : {}) }} />
+            ))}
+          </div>
+        </div>
+      ))}
+
+      <div style={{ display: "flex", gap: 9 }}>
+        <button style={{ ...S.navBtn, color: "var(--sp-mut)" }}
+          onClick={() => setAsk({ msg: "استعادة المراتب الأصلية؟", onYes: resetTiers })}>
+          استعادة المراتب
+        </button>
+        <button style={{ ...S.navBtn, color: "var(--sp-mut)" }}
+          onClick={() => setAsk({ msg: "استعادة السنن الأصلية ٢٦ وإلغاء كل تعديلاتك؟", onYes: resetSunan })}>
+          استعادة السنن
+        </button>
+      </div>
     </div>
   );
 
@@ -2585,13 +2795,13 @@ export function SunanEditor({ embedded = false }) {
           <div style={{ display: "flex", gap: 9 }}>
             <div style={{ flex: 1 }}>
               <div style={S.aLbl}>الجواهر لكل خطوة</div>
-              <NumField value={item.g} min={0} max={99}
+              <NumField value={item.g} min={0} max={99} label="الجواهر"
                 onChange={(v) => patch(item.k, "g", v)} />
             </div>
             {item.type === "cycle" && (
               <div style={{ flex: 1 }}>
                 <div style={S.aLbl}>نهاية العدّاد</div>
-                <NumField value={item.max} min={2} max={99}
+                <NumField value={item.max} min={2} max={99} label="نهاية العدّاد"
                   onChange={(v) => patch(item.k, "max", v)} />
               </div>
             )}
@@ -2719,7 +2929,7 @@ export function SunanEditor({ embedded = false }) {
 
 /* غلاف مستقلّ — للاستعمال في صفحة خاصّة باللوحة */
 export function SillaAdmin({ theme = "light" }) {
-  useEffect(() => { hydrateSunan(); hydrateSound(); hydrateSkin(); }, []);
+  useEffect(() => { hydrateSunan(); hydrateSound(); hydrateSkin(); hydrateTiers(); }, []);
   return (
     <div data-theme={theme} style={S.root} dir="rtl">
       <Styles />
@@ -2732,7 +2942,7 @@ export function SillaAdmin({ theme = "light" }) {
    <SillaParadise/> — الغلاف: تبويبان (الجنّة · التعبئة)
    ════════════════════════════════════════════════════════════════════ */
 export default function SillaParadise({ theme = "light", initialLog = {}, editable = true }) {
-  useEffect(() => { hydrateSunan(); hydrateSound(); hydrateSkin(); }, []);  /* تفضيلات المتصفّح */
+  useEffect(() => { hydrateSunan(); hydrateSound(); hydrateSkin(); hydrateTiers(); }, []);
   const st = useSillaState(initialLog);
   const [tab, setTab] = useState("village");
   return (
@@ -2816,6 +3026,17 @@ const S = {
   sub: { fontSize: 10.5, color: "var(--sp-mut)" },
   stat: { background: "var(--sp-surf)", border: "1px solid var(--sp-line)", borderRadius: 13,
           padding: "7px 13px", textAlign: "center", boxShadow: "var(--sp-sh)" },
+  rankRow: { display: "flex", alignItems: "center", gap: 10, marginBottom: 10,
+             background: "var(--sp-surf)", borderWidth: 1.5, borderStyle: "solid",
+             borderRadius: 15, padding: "9px 12px", boxShadow: "var(--sp-sh)" },
+  rankB: { color: "#fff", fontSize: 12, fontWeight: 700, borderRadius: 10,
+           padding: "5px 12px", flexShrink: 0 },
+  rankBar: { height: 7, borderRadius: 5, background: "var(--sp-bg)", overflow: "hidden" },
+  rankFill: { height: "100%", borderRadius: 5, transition: "width .7s cubic-bezier(.2,.9,.3,1)" },
+  rankT: { fontSize: 9.5, color: "var(--sp-mut)", marginTop: 4 },
+  rankBig: { fontSize: 30, fontWeight: 700, lineHeight: 1.3, margin: "2px 0 8px" },
+  rankRing: { width: 54, height: 54, margin: "0 auto", borderRadius: "50%",
+              borderWidth: 3, borderStyle: "solid" },
   skinB: { display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
            background: "var(--sp-surf)", borderWidth: 1, borderStyle: "solid",
            borderColor: "var(--sp-line)", borderRadius: 13, padding: "7px 10px",
@@ -2827,8 +3048,16 @@ const S = {
   statL: { fontSize: 9, color: "var(--sp-mut)" },
   /* المشهد */
   stage: { position: "relative", borderRadius: 18, overflow: "hidden",
-           border: "1px solid var(--sp-line)", boxShadow: "var(--sp-sh)",
+           borderWidth: 1, borderStyle: "solid", borderColor: "var(--sp-line)",
+           boxShadow: "var(--sp-sh)",
            marginBottom: 10, touchAction: "none" },
+  stageFull: { position: "fixed", inset: 0, zIndex: 60, borderRadius: 0,
+               marginBottom: 0, borderWidth: 0, height: "100dvh" },
+  fullB: { position: "absolute", top: 10, right: 10, zIndex: 8, width: 34, height: 34,
+           borderRadius: 11, borderWidth: 1, borderStyle: "solid",
+           borderColor: "rgba(255,255,255,.35)", background: "rgba(20,40,36,.42)",
+           color: "#fff", display: "flex", alignItems: "center", justifyContent: "center",
+           backdropFilter: "blur(4px)", padding: 0 },
   pad: { position: "absolute", bottom: 11, left: 11, width: 84, height: 84, borderRadius: "50%",
          background: "rgba(255,255,255,.2)", border: "1px solid rgba(255,255,255,.3)",
          backdropFilter: "blur(4px)" },
@@ -2847,7 +3076,8 @@ const S = {
   cardN: { fontSize: 10, color: "var(--sp-mut)", marginTop: 2 },
   cardCount: { flexShrink: 0, fontSize: 12, fontWeight: 700, color: "var(--sp-gold)",
                background: "var(--sp-aura)", borderRadius: 9, padding: "4px 9px" },
-  cardH: { fontSize: 10.5, color: "var(--sp-mut)", lineHeight: 1.85, marginTop: 9 },
+  cardH: { fontSize: 10.5, color: "var(--sp-mut)", lineHeight: 1.8, marginTop: 8,
+           maxHeight: 62, overflowY: "auto" },
   cardX: { fontSize: 8.5, color: "var(--sp-mut)", textAlign: "center", marginTop: 7, opacity: .7 },
   zc: { position: "absolute", top: 0, right: 0, left: 0, padding: "7px 13px 14px",
         background: "linear-gradient(180deg,var(--sp-scrim),transparent)",
