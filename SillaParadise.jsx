@@ -150,7 +150,7 @@ const DEFAULT_SECS=[
    h:'«من قال سبحان الله العظيم وبحمده غُرست له نخلة في الجنة» — الترمذي.'},
   {k:'dubur',n:'٣٣ دبر كل صلاة',i:'garden',b:'بستان',type:'cycle',max:5,g:2,
    h:'«معقّبات لا يخيب قائلهنّ» — يتّسع بستانك مع كل تسبيح.'},
-  {k:'shafa',n:'استشفاع',i:'dome',b:'قبة نور',type:'bool',g:8,q:'١ د',qt:'عشر صلوات على النبي ﷺ',
+  {k:'shafa',n:'استشفاع',i:'nur',b:'قبة نور',type:'bool',g:8,q:'١ د',qt:'عشر صلوات على النبي ﷺ',
    h:'«من صلى عليّ صلاةً واحدة صلى الله عليه بها عشرًا» — تشعّ قبّة النور في جنّتك.'},
   {k:'basm',n:'البسملة',i:'pattern',b:'نقش',type:'bool',g:2,q:'ثوانٍ',qt:'قلها عند أي عمل تبدؤه',
    h:'«كل أمر ذي بال لا يُبدأ فيه ببسم الله فهو أبتر» — نقشٌ يزيّن جنّتك.'},
@@ -212,8 +212,11 @@ export function normalizeSecs(list) {
       id: String(s.id), t: String(s.t || s.id), c,
       items: (Array.isArray(s.items) ? s.items : []).filter((i) => i && i.k).map((i) => {
         const type = i.type === "cycle" ? "cycle" : "bool";
+        /* المسجد صار أساس القرية لا بناءَ سنّة — فمن حُفظ عنده على «dome» يُنقل */
+        const bld = i.i === "dome" ? "nur" : i.i;
         const it = {
-          ...i, k: String(i.k), n: String(i.n || ""), i: i.i, ic: i.ic || i.i,
+          ...i, k: String(i.k), n: String(i.n || ""), i: bld,
+          ic: (i.ic === "dome" ? "nur" : i.ic) || bld,
           b: String(i.b || ""), h: String(i.h || ""),
           type, g: Math.max(0, Math.round(+i.g || 0)), sec: String(s.id), c,
         };
@@ -353,7 +356,7 @@ function sat(hex) {
    وهي إضافاتٌ على المشهد، لا تمسّ الأبنية الـ٢٦ ولا مواضعها (§٣). */
 export const PERKS = {
   jet:     { n:"نافورة البحرة",   ic:"fountain", d:"يتدفّق الماء من قلب الصحن." },
-  fly:     { n:"فراشات الزهور",   ic:"sparkle",  d:"فراشاتٌ تحوم حول زهورك." },
+  flag:    { n:"رايات الأسوار",   ic:"feather",  d:"راياتٌ ترفرف على سور جنّتك كلّه." },
   blossom: { n:"زهرٌ في الريح",   ic:"leaf",     d:"وريقاتٌ تتطاير في أرضك." },
   birds:   { n:"طيورٌ تحلّق",     ic:"feather",  d:"أسرابٌ تعبر سماء جنّتك." },
   lantern: { n:"فوانيس الممرّات", ic:"lamp",     d:"فوانيس تضيء دروبك." },
@@ -367,7 +370,7 @@ export const LS_TIERS = "silla.tiers.v1";
 const DEFAULT_TIERS = [
   { id:"t1", n:"غَرْس",    g:0,    c:"#3FBBA4", r:"",        d:"بدأتَ الغرس — أوّل أثرٍ في أرضك." },
   { id:"t2", n:"رَوْضة",   g:200,  c:"#5FC74A", r:"jet",     d:"اخضرّت أرضك، وتدفّقت بحرتها." },
-  { id:"t3", n:"بُستان",   g:500,  c:"#E8B62C", r:"fly",     d:"أثمر غرسك، وحامت عليه الفراشات." },
+  { id:"t3", n:"بُستان",   g:500,  c:"#E8B62C", r:"flag",    d:"عَلَت راياتُك على السور." },
   { id:"t4", n:"ظِلال",    g:900,  c:"#F0873C", r:"blossom", d:"امتدّت ظلالها، وتطاير زهرها." },
   { id:"t5", n:"جَنّة",    g:1400, c:"#E8566E", r:"birds",   d:"تمّت عمارتها، وعبرت سماءها الطير." },
   { id:"t6", n:"نُور",     g:2000, c:"#8E5FE0", r:"lantern", d:"أضاءت دروبها بالفوانيس." },
@@ -898,78 +901,125 @@ DRAW.garden=(x,y,n)=>{const k=Math.min(Math.round(n*40/DCAP),40);
   X.beginPath();X.moveTo(a,b);X.lineTo(a,b-5);X.stroke();
   canopy(a,b-11,7.2,DK()?'#5FBF87':'#84D9A4',DK()?'#215F3E':'#357F52')})};
 
-DRAW.dome=(x,y,n)=>{if(!n)return;
- /* قلب القرية. يُقرأ بالتراصّ: مصطبة ← بيت صلاة ← رقبة ظاهرة ← قبّة.
-    الرقبة أضيق من القبّة عمدًا، وإلا ابتلعتها القبّة فبدت على الهواء. */
- const g=Math.min(n,DCAP)/DCAP,s=.66+g*.4;
+/* ════ المسجد — أساس القرية ════
+   ليس مربوطًا بسنّة: هو مركز الأرض، ويتطوّر بمرتبة الطالب لا بعدد أيامه.
+   المستوى ٠ مصلّى بسيط، ثم تُضاف القبّة فالأبراج فالمئذنة فالذهب. */
+let MLV = 0;                      /* مستوى المسجد = ترتيب المرتبة */
+DRAW.dome=(x,y,lv)=>{
+ const L=Math.max(0,Math.min(7,lv|0)), g=L/7, s=.72+g*.5;
  const [cx,cy]=SPOT.dome;
- const SX=44*s,SY=29*s;
+ const SX=42*s,SY=28*s;
  EXTENT.dome={x0:cx-SX,x1:cx+SX,y0:cy-SY,y1:cy+SY};
  const px=IX(cx,cy),py=IY(cx,cy);
- const PH=8*s,HH=30*s,NH=19*s;                 /* مصطبة · بيت الصلاة · الرقبة */
- const HW=SX*.8,HD=SY*.78;
+ const PH=8*s,HH=(24+L*1.9)*s,HW=SX*.8,HD=SY*.78;
 
- /* هالة النور */
- X.save();X.globalAlpha=(.13+g*.19)+Math.sin(ph*.9)*.05;
- const gl=X.createRadialGradient(px,py-PH-HH-NH-20*s,0,px,py-PH-HH-NH-20*s,140*s);
- gl.addColorStop(0,'#FFE9A8');gl.addColorStop(.5,'rgba(255,220,140,.26)');
- gl.addColorStop(1,'rgba(255,233,168,0)');
- X.fillStyle=gl;X.beginPath();X.arc(px,py-PH-HH-NH-20*s,140*s,0,7);X.fill();X.restore();
+ /* هالة النور — تشتدّ بالمستوى */
+ if(L>=5){X.save();X.globalAlpha=(.10+g*.20)+Math.sin(ph*.9)*.05;
+  const gy=py-PH-HH-40*s;
+  const gl=X.createRadialGradient(px,gy,0,px,gy,150*s);
+  gl.addColorStop(0,'#FFE9A8');gl.addColorStop(.5,'rgba(255,220,140,.26)');
+  gl.addColorStop(1,'rgba(255,233,168,0)');
+  X.fillStyle=gl;X.beginPath();X.arc(px,gy,150*s,0,7);X.fill();X.restore()}
 
- const T=DK()?'#D8C99E':'#F7F0DC',R=DK()?'#B6A77D':'#E0D4B6',L=DK()?'#8A7C56':'#BCAE8C';
- /* المصطبة */
+ const T=DK()?'#D8C99E':'#F7F0DC',R=DK()?'#B6A77D':'#E0D4B6',Lf=DK()?'#8A7C56':'#BCAE8C';
+ /* مصطبة */
  isoBox(cx,cy,SX,SY,PH,DK()?'#C4B68E':'#EAE1C8',DK()?'#A49670':'#D2C6A8',DK()?'#807454':'#B0A488');
  /* بيت الصلاة */
- isoBox(cx,cy,HW,HD,HH,T,R,L,PH);
- /* قناطر محفورة في الوجه الأمامي الغربيّ */
+ isoBox(cx,cy,HW,HD,HH,T,R,Lf,PH);
+ /* قناطر الوجه — تضيء من المستوى ٣ */
  for(let i=-1;i<=1;i++){
-  const wx=cx+i*HW*.55;
-  const bx=IX(wx,cy+HD),by=IY(wx,cy+HD)-PH;
-  const aw=8*s,ah=HH*.74;
+  const wx=cx+i*HW*.55,bx=IX(wx,cy+HD),by=IY(wx,cy+HD)-PH;
+  const aw=7.5*s,ah=HH*.72;
   X.fillStyle=DK()?'#101F1A':'#33513F';
   X.beginPath();X.moveTo(bx-aw,by);X.lineTo(bx-aw,by-ah*.52);
   X.quadraticCurveTo(bx,by-ah,bx+aw,by-ah*.52);X.lineTo(bx+aw,by);X.closePath();X.fill();
   edge(1.1);
-  X.fillStyle='#FFE3A0';X.globalAlpha=.55;
-  X.beginPath();X.ellipse(bx,by-ah*.44,aw*.52,ah*.2,0,0,7);X.fill();X.globalAlpha=1}
- /* أربعة أبراج في الأركان */
- [[-1,-1],[1,-1],[-1,1],[1,1]].forEach(([dx,dy])=>{
-  const tw=5*s,twx=cx+dx*SX*.9,twy=cy+dy*SY*.86,TH=HH*1.34;
-  isoBox(twx,twy,tw,tw,TH,T,R,L,PH);
+  if(L>=3){X.fillStyle='#FFE3A0';X.globalAlpha=.4+g*.35;
+   X.beginPath();X.ellipse(bx,by-ah*.42,aw*.5,ah*.19,0,0,7);X.fill();X.globalAlpha=1}}
+ /* أبراج الأركان — من المستوى ٢ */
+ if(L>=2){[[-1,-1],[1,-1],[-1,1],[1,1]].forEach(([dx,dy],qi)=>{
+  const tw=4.6*s,twx=cx+dx*SX*.9,twy=cy+dy*SY*.86,TH=HH*(1.1+g*.3);
+  isoBox(twx,twy,tw,tw,TH,T,R,Lf,PH);
   const tx=IX(twx,twy),ty=IY(twx,twy)-PH-TH;
-  X.fillStyle=sat(DK()?'#C9A54A':'#D8B45E');
+  X.fillStyle=sat(L>=5?(DK()?'#C9A54A':'#D8B45E'):(DK()?'#9C8F68':'#C4B79A'));
   X.beginPath();X.moveTo(tx-tw*1.5,ty);
   X.bezierCurveTo(tx-tw*1.5,ty-tw*2.4,tx+tw*1.5,ty-tw*2.4,tx+tw*1.5,ty);
-  X.closePath();X.fill();edge(1)});
- /* الرقبة — ضيّقة وعالية فتظهر تحت القبّة */
- const NW=SX*.34;
- isoBox(cx,cy,NW,SY*.34,NH,T,R,L,PH+HH);
- const NY=py-PH-HH-NH;
- /* نوافذ الرقبة */
- X.fillStyle='#FFE3A0';
- [-1,0,1].forEach((i)=>{const wx2=IX(cx+i*NW*.5,cy+SY*.34);
-  X.globalAlpha=.7;X.beginPath();X.ellipse(wx2,NY+NH*.5,2.4*s,4.4*s,0,0,7);X.fill()});
- X.globalAlpha=1;
- /* طوق القبّة ثم القبّة */
- const RR=NW*1.5;
+  X.closePath();X.fill();edge(1);
+  /* رايات من المستوى ٦ */
+  if(L>=6){const fw=Math.sin(ph*2+qi)*2.2;
+   X.fillStyle=sat(TIERC);X.beginPath();
+   X.moveTo(tx,ty-tw*2.4);X.lineTo(tx+11*s+fw,ty-tw*2.4+4*s);
+   X.lineTo(tx,ty-tw*2.4+8*s);X.closePath();X.fill();edge(.9)}})}
+ /* مئذنة — من المستوى ٤ */
+ if(L>=4){const mx=cx-SX*1.02,my=cy+SY*.5,MH=HH*1.9;
+  isoBox(mx,my,4*s,4*s,MH,T,R,Lf,PH);
+  const ax=IX(mx,my),ay=IY(mx,my)-PH-MH;
+  X.fillStyle=sat(T);X.beginPath();X.ellipse(ax,ay,7*s,3*s,0,0,7);X.fill();edge(1);
+  X.fillStyle=sat(L>=5?'#D8B45E':'#C4B79A');
+  X.beginPath();X.moveTo(ax-5*s,ay-2*s);
+  X.bezierCurveTo(ax-5*s,ay-11*s,ax+5*s,ay-11*s,ax+5*s,ay-2*s);X.closePath();X.fill();edge(1)}
+ /* الرقبة والقبّة — من المستوى ١ */
+ if(L>=1){
+  const NH=(11+L*1.6)*s,NW=SX*.32;
+  isoBox(cx,cy,NW,SY*.32,NH,T,R,Lf,PH+HH);
+  const NY=py-PH-HH-NH;
+  if(L>=3){X.fillStyle='#FFE3A0';X.globalAlpha=.65;
+   [-1,0,1].forEach((i)=>{const wx2=IX(cx+i*NW*.5,cy+SY*.32);
+    X.beginPath();X.ellipse(wx2,NY+NH*.5,2.2*s,4*s,0,0,7);X.fill()});X.globalAlpha=1}
+  const RR=NW*(1.28+g*.28);
+  X.fillStyle=sat(L>=5?(DK()?'#B8922E':'#C9A54A'):(DK()?'#9C8F68':'#C8BB9E'));
+  X.beginPath();X.ellipse(px,NY,RR*1.06,RR*.26,0,0,7);X.fill();edge(1.2);
+  const dg=X.createRadialGradient(px-RR*.36,NY-RR*.62,3,px,NY,RR*1.25);
+  if(L>=5){dg.addColorStop(0,sat('#FCF2CC'));dg.addColorStop(.5,sat('#E8C874'));
+           dg.addColorStop(1,sat('#A88232'))}
+  else{dg.addColorStop(0,sat(DK()?'#DACDA6':'#F2EAD4'));
+       dg.addColorStop(1,sat(DK()?'#8E8260':'#B8AA8C'))}
+  X.fillStyle=dg;
+  X.beginPath();X.moveTo(px-RR,NY);
+  X.bezierCurveTo(px-RR,NY-RR*1.34,px+RR,NY-RR*1.34,px+RR,NY);
+  X.closePath();X.fill();edge(1.4);
+  /* الصاري والهلال — من المستوى ٥ */
+  if(L>=5){const FY=NY-RR;
+   X.strokeStyle=sat('#C9A54A');X.lineWidth=2.4*s;X.lineCap='round';
+   X.beginPath();X.moveTo(px,FY);X.lineTo(px,FY-14*s);X.stroke();
+   X.fillStyle=sat('#D8B45E');X.beginPath();
+   X.arc(px,FY-19*s,5*s,0,7);X.arc(px+2.2*s,FY-20.3*s,4.3*s,0,7);
+   X.fill('evenodd');edge(1)}}};
+
+/* ── قبة نور: بناء الاستشفاع بعد فكّه عن المسجد ── */
+DRAW.nur=(x,y,n)=>{if(!n)return;
+ const g=Math.min(n,DCAP)/DCAP,s=.6+g*.55;
+ const [cx,cy]=SPOT.nur;
+ const px=IX(cx,cy),py=IY(cx,cy);
+ shadow(px,py,20*s,6*s,.2);
+ X.save();X.globalAlpha=(.16+g*.26)+Math.sin(ph*1.1)*.07;
+ const gl=X.createRadialGradient(px,py-26*s,0,px,py-26*s,64*s);
+ gl.addColorStop(0,'#FFF0BE');gl.addColorStop(.5,'rgba(255,232,168,.3)');
+ gl.addColorStop(1,'rgba(255,240,190,0)');
+ X.fillStyle=gl;X.beginPath();X.arc(px,py-26*s,64*s,0,7);X.fill();X.restore();
+ const T=DK()?'#D6C79C':'#F5EEDA',R=DK()?'#B4A57B':'#DED2B4',L2=DK()?'#887A54':'#BAAC8A';
+ isoBox(cx,cy,15*s,10*s,4*s,T,R,L2);
+ /* أربعة أعمدة */
+ [[-1,-1],[1,-1],[-1,1],[1,1]].forEach(([dx,dy])=>
+  isoBox(cx+dx*11*s,cy+dy*7*s,2*s,2*s,17*s,T,R,L2,4*s));
+ const NY=py-4*s-17*s, RR=13*s;
  X.fillStyle=sat(DK()?'#B8922E':'#C9A54A');
- X.beginPath();X.ellipse(px,NY,RR*1.06,RR*.26,0,0,7);X.fill();edge(1.2);
- const dg=X.createRadialGradient(px-RR*.36,NY-RR*.62,3,px,NY,RR*1.25);
- dg.addColorStop(0,sat(DK()?'#F6E8BE':'#FCF2CC'));
- dg.addColorStop(.5,sat(DK()?'#DCB95E':'#E8C874'));
- dg.addColorStop(1,sat(DK()?'#8C6C14':'#A88232'));
+ X.beginPath();X.ellipse(px,NY,RR*1.05,RR*.26,0,0,7);X.fill();edge(1.1);
+ const dg=X.createRadialGradient(px-RR*.35,NY-RR*.6,2,px,NY,RR*1.2);
+ dg.addColorStop(0,'#FFF6DA');dg.addColorStop(.55,sat('#EBD48A'));
+ dg.addColorStop(1,sat('#B08E36'));
  X.fillStyle=dg;
  X.beginPath();X.moveTo(px-RR,NY);
- X.bezierCurveTo(px-RR,NY-RR*1.34,px+RR,NY-RR*1.34,px+RR,NY);
- X.closePath();X.fill();edge(1.4);
- /* الصاري والهلال */
- const FY=NY-RR*1.0;
- X.strokeStyle=sat(DK()?'#E5CF9A':'#C9A54A');X.lineWidth=2.6*s;X.lineCap='round';
- X.beginPath();X.moveTo(px,FY);X.lineTo(px,FY-16*s);X.stroke();
- X.fillStyle=sat(DK()?'#E5CF9A':'#D8B45E');
- X.beginPath();
- X.arc(px,FY-21*s,5.4*s,0,7);X.arc(px+2.4*s,FY-22.4*s,4.6*s,0,7);
- X.fill('evenodd');edge(1)};
+ X.bezierCurveTo(px-RR,NY-RR*1.3,px+RR,NY-RR*1.3,px+RR,NY);
+ X.closePath();X.fill();edge(1.2);
+ /* شعاع صاعد */
+ X.save();X.globalAlpha=.2+Math.sin(ph*1.4)*.08;
+ const bg=X.createLinearGradient(0,NY-RR*1.3,0,NY-RR*1.3-56*s);
+ bg.addColorStop(0,'rgba(255,240,190,.75)');bg.addColorStop(1,'rgba(255,240,190,0)');
+ X.fillStyle=bg;
+ X.beginPath();X.moveTo(px-4*s,NY-RR*1.3);X.lineTo(px+4*s,NY-RR*1.3);
+ X.lineTo(px+11*s,NY-RR*1.3-56*s);X.lineTo(px-11*s,NY-RR*1.3-56*s);
+ X.closePath();X.fill();X.restore()};
 
 DRAW.sundial=(x,y,n)=>{if(!n)return;shadow(x,y,14,5);
  X.fillStyle=lit(x,y,26,DK()?'#B8AA88':'#DCD2B4',DK()?'#7E735A':'#A89A78');
@@ -1213,6 +1263,7 @@ export const SPOT={
  mihrab:[328,194],
  minaret:[146,218],
  dome:[540,519],
+ nur:[356,462],
  gate:[466,197],
  sundial:[607,198],
  rug:[760,284],
@@ -1236,7 +1287,7 @@ export const SPOT={
 /* ما يترنّح مع الريح — النبات القائم وحده، لا ما يغطّي الأرض */
 const SWAY = { palm:1, arak:1, fruit:1, flower:1, garden:1 };
 const BACK   = ["fort","fence","stream","crescent","shieldL","pattern","path"];
-const SORTED = ["minaret","gate","mihrab","sundial","house","dome","rug","bridge","fruit",
+const SORTED = ["minaret","gate","mihrab","sundial","house","nur","rug","bridge","fruit",
                 "well","palm","arak","garden","spring","lamp","bighouse","fountain","tent","flower"];
 
 /* ════════ لوحة البيت الدمشقي ════════
@@ -1576,6 +1627,16 @@ function perkLanterns() {
   const spots = [];
   for (let i = 0; i < 6; i++) { const t = 120 + i * 160; spots.push([t, 372], [t, 468]); }
   for (let i = 0; i < 4; i++) { const t = 130 + i * 170; spots.push([486, t], [584, t]); }
+  /* وعلى الرواق الطائف بالصحن، فتضيء الأطراف لا الوسط وحده */
+  const rx0 = IN.x + 30, ry0 = IN.y + 30, rx1 = IN.x + IN.w - 30, ry1 = IN.y + IN.h - 30;
+  for (let i = 0; i < 6; i++) {
+    const u = i / 5;
+    spots.push([rx0 + (rx1 - rx0) * u, ry0], [rx0 + (rx1 - rx0) * u, ry1]);
+  }
+  for (let i = 1; i < 5; i++) {
+    const u = i / 5;
+    spots.push([rx0, ry0 + (ry1 - ry0) * u], [rx1, ry0 + (ry1 - ry0) * u]);
+  }
   spots.forEach(([wx, wy], i) => {
     const px = IX(wx, wy), py = IY(wx, wy);
     shadow(px, py, 4, 2, .16);
@@ -1612,26 +1673,39 @@ function perkJet() {
   X.restore();
 }
 
-/* فراشات حول حقل الزهور */
-function perkFly() {
-  const C = ["#F2C14E", "#E8657F", "#B87FD0", "#6FD08C"];
+/* رايات ترفرف على السور — تطوف بالمحيط كلّه لا بزاويةٍ منه */
+function perkBanners() {
+  const P0 = [], x0 = IN.x + 26, y0 = IN.y + 26, x1 = IN.x + IN.w - 26, y1 = IN.y + IN.h - 26;
+  for (let i = 0; i < 7; i++) P0.push([x0 + (x1 - x0) * i / 6, y0], [x0 + (x1 - x0) * i / 6, y1]);
+  for (let i = 1; i < 5; i++) P0.push([x0, y0 + (y1 - y0) * i / 5], [x1, y0 + (y1 - y0) * i / 5]);
   X.save();
-  for (let i = 0; i < 9; i++) {
-    const t = ph * .5 + i * 1.7;
-    const wx = 610 + Math.sin(t * .8 + i) * 78, wy = 700 + Math.cos(t * .6 + i * 2) * 46;
-    const px = IX(wx, wy), py = IY(wx, wy) - 20 - Math.sin(t * 2) * 8;
-    const f = Math.abs(Math.sin(t * 7));
-    X.fillStyle = C[i % 4]; X.globalAlpha = .92;
-    X.beginPath(); X.ellipse(px - 2.4, py, 2.6, 1.4 + f * 2.4, -.5, 0, 7); X.fill();
-    X.beginPath(); X.ellipse(px + 2.4, py, 2.6, 1.4 + f * 2.4, .5, 0, 7); X.fill();
-  }
+  P0.forEach(([wx, wy], i) => {
+    const px = IX(wx, wy), py = IY(wx, wy);
+    shadow(px, py, 3, 1.6, .14);
+    X.strokeStyle = DK() ? "#3A4640" : "#6E6552"; X.lineWidth = 2.2; X.lineCap = "round";
+    X.beginPath(); X.moveTo(px, py); X.lineTo(px, py - 30); X.stroke();
+    /* القماش يتموّج بجيبٍ يتأخّر بطول الراية */
+    const w = Math.sin(ph * 2.4 + i * .8);
+    X.fillStyle = sat(TIERC);
+    X.beginPath(); X.moveTo(px, py - 30);
+    X.quadraticCurveTo(px + 8 + w * 3, py - 27 + w * 2, px + 15 + w * 4, py - 24);
+    X.quadraticCurveTo(px + 8 + w * 2, py - 20 - w, px, py - 17);
+    X.closePath(); X.fill(); edge(1);
+    X.fillStyle = "rgba(255,255,255,.22)";
+    X.beginPath(); X.moveTo(px, py - 30);
+    X.quadraticCurveTo(px + 7 + w * 3, py - 27.5 + w * 2, px + 14 + w * 4, py - 25);
+    X.lineTo(px + 13 + w * 4, py - 23); X.quadraticCurveTo(px + 6 + w * 2, py - 25, px, py - 27);
+    X.closePath(); X.fill();
+    X.fillStyle = sat(DK() ? "#C9A54A" : "#D8B45E");
+    X.beginPath(); X.arc(px, py - 31.5, 2.4, 0, 7); X.fill(); edge(.9);
+  });
   X.restore();
 }
 
 /* وريقاتٌ تتطاير */
 function perkBlossom() {
   X.save();
-  for (let i = 0; i < 26; i++) {
+  for (let i = 0; i < 70; i++) {
     const t = (ph * .18 + RN(i)) % 1;
     const wx = IN.x + RN(i + 3) * IN.w, wy = IN.y + t * IN.h;
     const px = IX(wx, wy) + Math.sin(ph * 1.6 + i) * 16, py = IY(wx, wy) - 34 * (1 - t);
@@ -1648,8 +1722,8 @@ function perkBirds() {
   X.save();
   X.strokeStyle = DK() ? "rgba(226,238,236,.8)" : "rgba(52,70,64,.72)";
   X.lineCap = "round"; X.lineJoin = "round";
-  for (let f = 0; f < 2; f++) {
-    const base = ((ph * .09 + f * .5) % 1.25) * (W + 300) - 150;
+  for (let f = 0; f < 4; f++) {
+    const base = ((ph * .09 + f * .27) % 1.25) * (W + 300) - 150;
     for (let i = 0; i < 5; i++) {
       const px = base - i * 26 + (i % 2) * 9;
       const py = 76 + f * 54 + i * 9 + Math.sin(ph * 1.1 + i + f) * 5;
@@ -1664,7 +1738,7 @@ function perkBirds() {
 }
 
 function perksBack()  { if (PERKON.stars) perkStars(); if (PERKON.lantern) perkLanterns(); }
-function perksFront() { if (PERKON.jet) perkJet(); if (PERKON.fly) perkFly();
+function perksFront() { if (PERKON.jet) perkJet(); if (PERKON.flag) perkBanners();
                         if (PERKON.blossom) perkBlossom(); if (PERKON.birds) perkBirds(); }
 
 /* الأرض ثابتة لا تتغيّر — تُرسم مرّة واحدة لكل ثيم وتُنسخ كصورة كل إطار.
@@ -1756,6 +1830,7 @@ export function Village({ st, theme = "light" }) {
   const pvT = tierPv != null ? TIERS[Math.min(tierPv, TIERS.length - 1)] : null;
   TIERC = (pvT || rank.cur).c;
   PERKON = perksAt(pvT ? pvT.g : allGems);
+  MLV = tierPv != null ? tierPv : rank.i;      /* مستوى المسجد = ترتيب المرتبة */
   const stepTier = (d) => {
     const base = tierPv == null ? rank.i : tierPv;
     const n = Math.max(0, Math.min(TIERS.length - 1, base + d));
@@ -1861,6 +1936,7 @@ export function Village({ st, theme = "light" }) {
         const it = ITEMS.find((i) => i.i === nm);
         snap[nm] = it ? (t[it.k] || 0) : 0;
       });
+      snap.dome = MLV;                 /* المسجد ينمو بالمرتبة، فيقفز عند الترقّي */
       if (prevN.current) {
         let grew = false;
         Object.keys(snap).forEach((nm) => {
@@ -1925,12 +2001,21 @@ export function Village({ st, theme = "light" }) {
           if (pop) X.restore();
         } });
       });
+      /* المسجد ليس بناءَ سنّة، فيُضاف بنفسه ويُرتَّب بعمقه كالبقيّة */
+      {
+        const [ax, ay] = SPOT.dome, mx = IX(ax, ay), my = IY(ax, ay);
+        objs.push({ y: my, f: () => {
+          const pop = popAt("dome", mx, my);
+          DRAW.dome(mx, my, MLV);
+          if (pop) X.restore();
+        } });
+      }
       objs.push({ y: pjy, f: () => drawPlayer(P.current, pjx, pjy) });
       objs.sort((m, n) => m.y - n.y).forEach((o) => o.f());
 
       /* إطار الاختيار: معيّنٌ ينبض على الأرض تحت ما ضُغط */
       const selNow = selRef.current;
-      if (selNow && (t[selNow.k] || 0)) {
+      if (selNow && (selNow.mosque || (t[selNow.k] || 0))) {
         const ex = EXTENT[selNow.i];
         const [ax, ay] = SPOT[selNow.i];
         const x0 = ex ? ex.x0 - 26 : ax - 34, x1 = ex ? ex.x1 + 26 : ax + 34;
@@ -2120,6 +2205,21 @@ export function Village({ st, theme = "light" }) {
               }
               if (dist < nd) { nd = dist; best = { ...it, days }; }
             });
+            /* والمسجد يُصاب كغيره وإن لم يكن بناءَ سنّة */
+            {
+              const ex = EXTENT.dome;
+              if (ex) {
+                const qx = Math.max(ex.x0 - 22, Math.min(ex.x1 + 22, wx));
+                const qy = Math.max(ex.y0 - 22, Math.min(ex.y1 + 22, wy));
+                const dm = Math.hypot(wx - qx, wy - qy);
+                if (dm < nd) {
+                  nd = dm;
+                  best = { k: "__mosque", i: "dome", ic: "dome", c: TIERC,
+                           b: "المسجد", n: "أساس جنّتك", mosque: true, days: MLV + 1,
+                           h: "قلبُ القرية. لا تبنيه سنّةٌ بعينها، بل يعلو بمرتبتك — كلّما ترقّيتَ في المسار زِيد فيه." };
+                }
+              }
+            }
             if (best && nd < 46) { SFX.open(); setTapped(best); selRef.current = best; }
             else { setTapped(null); selRef.current = null; }
           }} />
@@ -2152,9 +2252,11 @@ export function Village({ st, theme = "light" }) {
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={S.cardB}>{tapped.b}</div>
-                <div style={S.cardN}>بناه: {tapped.n}</div>
+                <div style={S.cardN}>{tapped.mosque ? tapped.n : `بناه: ${tapped.n}`}</div>
               </div>
-              <div style={S.cardCount}>{ar(cap)}/{ar(tapped.days)}</div>
+              <div style={S.cardCount}>
+                {tapped.mosque ? `${ar(TIERS.length)}/${ar(tapped.days)}` : `${ar(cap)}/${ar(tapped.days)}`}
+              </div>
             </div>
             <div style={S.cardH}>{tapped.h}</div>
             <div style={S.cardX}>اضغط للإغلاق</div>
