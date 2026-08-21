@@ -362,15 +362,17 @@ export const PERKS = {
 export const PERK_KEYS = Object.keys(PERKS);
 
 export const LS_TIERS = "silla.tiers.v1";
+/* ألوانٌ متباعدة عمدًا: المسار يُقرأ قوسَ ألوانٍ صاعدًا، لا تدرّجًا أخضرَ
+   واحدًا — والتباعد هو ما يجعل كلَّ مرتبةٍ تُميَّز من بعيد. */
 const DEFAULT_TIERS = [
-  { id:"t1", n:"غَرْس",    g:0,    c:"#6BBFB2", r:"",        d:"بدأتَ الغرس — أوّل أثرٍ في أرضك." },
-  { id:"t2", n:"رَوْضة",   g:200,  c:"#5AAE6B", r:"jet",     d:"اخضرّت أرضك، وتدفّقت بحرتها." },
-  { id:"t3", n:"بُستان",   g:500,  c:"#4FA84E", r:"fly",     d:"أثمر غرسك، وحامت عليه الفراشات." },
-  { id:"t4", n:"ظِلال",    g:900,  c:"#C9A227", r:"blossom", d:"امتدّت ظلالها، وتطاير زهرها." },
-  { id:"t5", n:"جَنّة",    g:1400, c:"#E08A3C", r:"birds",   d:"تمّت عمارتها، وعبرت سماءها الطير." },
-  { id:"t6", n:"نُور",     g:2000, c:"#D4A03C", r:"lantern", d:"أضاءت دروبها بالفوانيس." },
-  { id:"t7", n:"سَكينة",   g:2800, c:"#5D6FD0", r:"stars",   d:"سكنت تحت سماءٍ من نجوم." },
-  { id:"t8", n:"فِرْدَوْس", g:4000, c:"#B96FD0", r:"",        d:"بلغتَ أعلاها — الفردوس الأعلى." },
+  { id:"t1", n:"غَرْس",    g:0,    c:"#3FBBA4", r:"",        d:"بدأتَ الغرس — أوّل أثرٍ في أرضك." },
+  { id:"t2", n:"رَوْضة",   g:200,  c:"#5FC74A", r:"jet",     d:"اخضرّت أرضك، وتدفّقت بحرتها." },
+  { id:"t3", n:"بُستان",   g:500,  c:"#E8B62C", r:"fly",     d:"أثمر غرسك، وحامت عليه الفراشات." },
+  { id:"t4", n:"ظِلال",    g:900,  c:"#F0873C", r:"blossom", d:"امتدّت ظلالها، وتطاير زهرها." },
+  { id:"t5", n:"جَنّة",    g:1400, c:"#E8566E", r:"birds",   d:"تمّت عمارتها، وعبرت سماءها الطير." },
+  { id:"t6", n:"نُور",     g:2000, c:"#8E5FE0", r:"lantern", d:"أضاءت دروبها بالفوانيس." },
+  { id:"t7", n:"سَكينة",   g:2800, c:"#4E7FE0", r:"stars",   d:"سكنت تحت سماءٍ من نجوم." },
+  { id:"t8", n:"فِرْدَوْس", g:4000, c:"#D9A441", r:"",        d:"بلغتَ أعلاها — الفردوس الأعلى." },
 ];
 export let TIERS = DEFAULT_TIERS.map((t) => ({ ...t }));
 let tierVer = 0;
@@ -1749,8 +1751,16 @@ export function Village({ st, theme = "light" }) {
 
   /* المرتبة: تلوّن حدّ الأرض، ويُحتفى ببلوغ عتبةٍ جديدة */
   const rank = tierAt(allGems);
-  TIERC = rank.cur.c;
-  PERKON = perksAt(allGems);
+  /* معاينة مرتبة: الأرض ومكافآتها كما تكون عند بلوغها */
+  const [tierPv, setTierPv] = useState(null);
+  const pvT = tierPv != null ? TIERS[Math.min(tierPv, TIERS.length - 1)] : null;
+  TIERC = (pvT || rank.cur).c;
+  PERKON = perksAt(pvT ? pvT.g : allGems);
+  const stepTier = (d) => {
+    const base = tierPv == null ? rank.i : tierPv;
+    const n = Math.max(0, Math.min(TIERS.length - 1, base + d));
+    SFX.rank(); setTierPv(n);
+  };
   const [rankUp, setRankUp] = useState(null);
   const [track, setTrack] = useState(false);
   useEffect(() => {
@@ -1762,7 +1772,9 @@ export function Village({ st, theme = "light" }) {
       if (seen >= 0) { setRankUp(rank.cur); SFX.rank(); }
     }
   }, [rank.i]);
-  const builds = useMemo(() => tally(viewDay, preview), [tally, viewDay, preview]);
+  /* المعاينة تُظهر الأرض عامرةً، وإلا لم يُرَ أثر المكافأة على أرضٍ خالية */
+  const builds = useMemo(() => tally(viewDay, preview || tierPv != null),
+                         [tally, viewDay, preview, tierPv]);
   const bRef = useRef(builds);
   useEffect(() => { bRef.current = builds; }, [builds]);
 
@@ -2033,7 +2045,34 @@ export function Village({ st, theme = "light" }) {
         <button style={S.trackB} onClick={() => { SFX.open(); setTrack(true); }}>المسار</button>
       </div>
 
-      {track && <Track gems={allGems} onClose={() => setTrack(false)} />}
+      {/* شريط المعاينة — أداة عرضٍ للتصميم، تُحذف عند الاعتماد */}
+      {pvT && (
+        <div style={{ ...S.pvBar, borderColor: pvT.c }}>
+          <button style={S.pvNav} disabled={tierPv <= 0}
+            onClick={() => stepTier(-1)} aria-label="المرتبة السابقة">
+            <Chevron dir="right" />
+          </button>
+          <div style={{ flex: 1, minWidth: 0, textAlign: "center" }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: pvT.c }}>
+              معاينة: {pvT.n}
+            </div>
+            <div style={S.lbl}>
+              {pvT.r ? PERKS[pvT.r].n : `لقب «${pvT.n}»`} · {fmt(pvT.g)} جوهرة
+            </div>
+          </div>
+          <button style={S.pvNav} disabled={tierPv >= TIERS.length - 1}
+            onClick={() => stepTier(1)} aria-label="المرتبة التالية">
+            <Chevron dir="left" />
+          </button>
+          <button style={S.pvX} onClick={() => { SFX.nav(); setTierPv(null); }}>إنهاء</button>
+        </div>
+      )}
+
+      {track && (
+        <Track gems={allGems} previewing={tierPv}
+          onClose={() => setTrack(false)}
+          onPreview={(i) => { SFX.rank(); setTierPv(i); setTrack(false); }} />
+      )}
 
       {/* شريط الشهر — الجنّة تتبدّل بتبدّله */}
       <MonthBar start={start} setStart={setStart} sub={`${fmt(monthGems)} جوهرة هذا الشهر`} />
@@ -2537,96 +2576,107 @@ const SoundBtn = () => {
   );
 };
 /* ════ مسار الجنّة ════
-   سُلَّمُ المراتب بما تفتحه كلٌّ منها. أهمّ ما فيه أن **المقفل يُرى**:
-   الطالب يعرف ما ينتظره فيسعى إليه، لا أن يُفاجأ به بعد بلوغه. */
-function Track({ gems, onClose }) {
+   بطاقاتٌ تُمرَّر أفقيًا لا قائمة: المفتوحُ ملوّنٌ يلمع، والمقفلُ باهتٌ بقفله
+   وما بقي له. وزرٌّ يعاين كلَّ مرتبةٍ في الأرض قبل بلوغها.               */
+function Track({ gems, onClose, onPreview, previewing }) {
   useTiers();
   const here = tierAt(gems).i;
+  const reelRef = useRef(null);
+
+  /* افتح على أوّل مقفلة — هي التي يسعى إليها */
+  useEffect(() => {
+    const el = reelRef.current && reelRef.current.querySelector('[data-at="' + Math.min(here + 1, TIERS.length - 1) + '"]');
+    if (el && el.scrollIntoView) el.scrollIntoView({ inline: "center", block: "nearest" });
+  }, [here]);
+
+  const total = TIERS[TIERS.length - 1].g || 1;
   return (
     <Overlay onClose={onClose} wide z={92}>
-      <div style={{ textAlign: "center", marginBottom: 4 }}>
-        <div style={{ fontSize: 16, fontWeight: 700 }}>مسار الجنّة</div>
-        <div style={S.lbl}>{fmt(gems)} جوهرة — وكلّ مرتبةٍ تفتح شيئًا يُرى في أرضك</div>
+      <div style={S.tkHead}>
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 700 }}>مسار الجنّة</div>
+          <div style={S.lbl}>كلّ مرتبةٍ تفتح شيئًا يُرى في أرضك</div>
+        </div>
+        <div style={S.tkGems}>{fmt(gems)} 💎</div>
       </div>
 
-      <div style={{ marginTop: 14 }}>
+      {/* شريط الطريق كلّه */}
+      <div style={S.tkRail}>
+        <div style={{ ...S.tkRailFill,
+                      width: `${Math.round(Math.min(1, gems / total) * 100)}%` }} />
+        {TIERS.map((t, i) => (
+          <span key={t.id} style={{ ...S.tkPin, insetInlineStart: `${(t.g / total) * 100}%`,
+                                    background: gems >= t.g ? t.c : "var(--sp-line)" }} />
+        ))}
+      </div>
+
+      {/* البطاقات */}
+      <div style={S.tkReel} ref={reelRef}>
         {TIERS.map((t, i) => {
           const got = gems >= t.g;
           const now = i === here;
           const perk = t.r ? PERKS[t.r] : null;
-          const prev = TIERS[i - 1];
-          const seg = !prev ? 1
-            : Math.max(0, Math.min(1, (gems - prev.g) / Math.max(1, t.g - prev.g)));
           return (
-            <div key={t.id} style={S.trRow}>
-              {/* السكّة والعقدة */}
-              <div style={S.trRail}>
-                {i > 0 && (
-                  <div style={S.trLineWrap}>
-                    <div style={{ ...S.trLine, height: `${Math.round(seg * 100)}%`,
-                                  background: t.c }} />
-                  </div>
-                )}
-                <div style={{ ...S.trNode,
-                  background: got ? t.c : "var(--sp-bg)",
-                  borderColor: got ? t.c : "var(--sp-line)",
-                  color: got ? "#fff" : "var(--sp-mut)",
-                  ...(now ? { boxShadow: `0 0 0 4px ${t.c}33` } : {}) }}>
-                  {got ? "✓" : ar(i + 1)}
-                </div>
-              </div>
+            <button key={t.id} data-at={i} className={got ? "sp-tile sp-shine" : "sp-tile"}
+              onClick={() => onPreview(i)}
+              style={{ ...S.tkCard,
+                ...(got ? { background: `linear-gradient(160deg, ${t.c}, ${t.c}C0 62%, ${t.c}88)`,
+                            borderColor: t.c, boxShadow: `0 6px 18px ${t.c}55` }
+                        : { background: `linear-gradient(160deg, ${t.c}26, ${t.c}0E)`,
+                            borderColor: t.c + "66" }),
+                ...(previewing === i ? { outline: "3px solid var(--sp-gold)", outlineOffset: 2 } : {}),
+                animationDelay: `${i * 70}ms` }}>
 
-              {/* المكافأة */}
-              <div style={{ ...S.trCard,
-                            borderColor: now ? t.c : "var(--sp-line)",
-                            opacity: got ? 1 : .72 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-                  <div style={{ ...S.trIc,
-                                background: got ? t.c : "var(--sp-bg)",
-                                borderColor: got ? t.c : "var(--sp-line)" }}>
-                    {perk ? (
-                      <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round"
-                        strokeLinejoin="round"
-                        style={{ width: 17, height: 17, stroke: got ? "#fff" : "var(--sp-mut)" }}
-                        dangerouslySetInnerHTML={{ __html: svg(perk.ic) }} />
-                    ) : (
-                      <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round"
-                        strokeLinejoin="round"
-                        style={{ width: 15, height: 15, stroke: got ? "#fff" : "var(--sp-mut)" }}>
-                        <path d="m12 3 2.6 5.3 5.9.8-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8L3.5 9.1l5.9-.8z" />
-                      </svg>
-                    )}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 700, color: got ? t.c : "var(--sp-txt)" }}>
-                      {perk ? perk.n : `لقب «${t.n}»`}
-                    </div>
-                    {/* خانتان متباعدتان — النقطة الملاصقة لرقم تُقرأ جزءًا منه */}
-                    <div style={S.trSub}>
-                      <span>{t.n}</span><span style={S.aBSep}>·</span>
-                      <span>{fmt(t.g)} جوهرة</span>
-                    </div>
-                  </div>
-                  {!got && (
-                    <svg viewBox="0 0 24 24" fill="none" stroke="var(--sp-mut)" strokeWidth="2"
-                      strokeLinecap="round" style={{ width: 14, height: 14, flexShrink: 0 }}>
+              <div style={{ ...S.tkBadge,
+                background: got ? "rgba(255,255,255,.28)" : t.c + "22",
+                color: got ? "#fff" : t.c }}>
+                {got ? "✓" : ar(i + 1)}
+              </div>
+              {now && <div style={{ ...S.tkNow, color: t.c }}>أنت هنا</div>}
+
+              <div style={{ ...S.tkIc,
+                            background: got ? "rgba(255,255,255,.22)" : t.c + "1A",
+                            borderColor: got ? "rgba(255,255,255,.45)" : t.c + "55" }}>
+                {perk ? (
+                  <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round"
+                    strokeLinejoin="round"
+                    style={{ width: 28, height: 28, stroke: got ? "#fff" : t.c, opacity: got ? 1 : .8 }}
+                    dangerouslySetInnerHTML={{ __html: svg(perk.ic) }} />
+                ) : (
+                  <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round"
+                    strokeLinejoin="round"
+                    style={{ width: 25, height: 25, stroke: got ? "#fff" : t.c, opacity: got ? 1 : .8 }}>
+                    <path d="m12 3 2.6 5.3 5.9.8-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8L3.5 9.1l5.9-.8z" />
+                  </svg>
+                )}
+                {!got && (
+                  <div style={{ ...S.tkLock, background: t.c, borderColor: "var(--sp-surf)" }}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6"
+                      strokeLinecap="round" style={{ width: 11, height: 11 }}>
                       <rect x="4" y="10" width="16" height="11" rx="2" />
                       <path d="M8 10V7a4 4 0 0 1 8 0v3" />
                     </svg>
-                  )}
-                </div>
-                <div style={S.trD}>{perk ? perk.d : t.d}</div>
-                {!got && (
-                  <div style={{ ...S.trNeed, color: t.c }}>
-                    بقي {fmt(t.g - gems)} جوهرة
                   </div>
                 )}
               </div>
-            </div>
+
+              <div style={{ ...S.tkName, color: got ? "#fff" : "var(--sp-txt)" }}>
+                {perk ? perk.n : `لقب «${t.n}»`}
+              </div>
+              <div style={{ ...S.tkTier, color: got ? "rgba(255,255,255,.85)" : "var(--sp-mut)" }}>
+                {t.n}
+              </div>
+              <div style={{ ...S.tkNeed,
+                            background: got ? "rgba(255,255,255,.22)" : t.c + "1F",
+                            color: got ? "#fff" : t.c }}>
+                {got ? "مفتوح ✓" : `${fmt(t.g - gems)} 💎`}
+              </div>
+            </button>
           );
         })}
       </div>
 
+      <div style={S.tkTip}>اضغط أيّ مرتبة لتعاين أرضك عندها</div>
       <button style={S.dlgX} onClick={onClose}>إغلاق</button>
     </Overlay>
   );
@@ -2676,7 +2726,8 @@ const BoltIcon = ({ white }) => (
 
 /* لوحة ألوان الأقسام — الستة الأولى هي ألوان الهوية */
 const SEC_PALETTE = [...new Set([...Object.values(SEC_COLOR),
-  "#2F7D74", "#C2544D", "#4F8A3D", "#8E6BB0", "#B0713C", "#41708F"])];
+  "#2F7D74", "#C2544D", "#4F8A3D", "#8E6BB0", "#B0713C", "#41708F",
+  "#3FBBA4", "#5FC74A", "#E8B62C", "#F0873C", "#E8566E", "#8E5FE0", "#4E7FE0", "#D9A441"])];
 
 /* أسماء الأبنية بالعربية — مأخوذة من الأصل، لئلا يظهر مفتاح لاتيني للمستخدم */
 const BUILD_AR = {};
@@ -3280,8 +3331,18 @@ function Styles() {
         22%{opacity:1;transform:translate(-50%,-14px) scale(1.12)}
         100%{opacity:0;transform:translate(-50%,-54px) scale(1)}
       }
+      /* بطاقات المسار: تدخل متتابعةً، والمفتوح يمرّ عليه بريق */
+      .sp-tile{animation:spTile .5s cubic-bezier(.2,1.5,.4,1) both}
+      @keyframes spTile{from{opacity:0;transform:translateY(14px) scale(.9)}
+                        to{opacity:1;transform:none}}
+      .sp-shine::after{content:"";position:absolute;top:-60%;bottom:-60%;width:38%;
+        background:linear-gradient(100deg,transparent,rgba(255,255,255,.42),transparent);
+        transform:skewX(-18deg);animation:spShine 3.4s ease-in-out infinite;
+        pointer-events:none}
+      @keyframes spShine{0%{inset-inline-start:-45%}
+                         55%,100%{inset-inline-start:115%}}
       @media (prefers-reduced-motion:reduce){
-        .sp-tap,.sp-pop{transition:none;animation-duration:.01ms}
+        .sp-tap,.sp-pop,.sp-tile,.sp-shine::after{transition:none;animation:none}
       }
     `}</style>
   );
@@ -3311,6 +3372,48 @@ const S = {
             borderWidth: 1.5, borderStyle: "solid", borderColor: "var(--sp-line)",
             background: "var(--sp-bg)", padding: "8px 9px", textAlign: "right" },
   edPerkN: { fontSize: 10.5, fontWeight: 600, color: "var(--sp-txt)" },
+  tkHead: { display: "flex", alignItems: "center", justifyContent: "space-between",
+            gap: 10, marginBottom: 12 },
+  tkGems: { background: "var(--sp-aura)", borderWidth: 1, borderStyle: "solid",
+            borderColor: "var(--sp-goldL)", color: "var(--sp-gold)", borderRadius: 11,
+            padding: "6px 11px", fontSize: 12.5, fontWeight: 700, flexShrink: 0 },
+  tkRail: { position: "relative", height: 8, borderRadius: 5, background: "var(--sp-bg)",
+            marginBottom: 16 },
+  tkRailFill: { height: "100%", borderRadius: 5,
+                background: "linear-gradient(90deg,var(--sp-mint),var(--sp-gold))",
+                transition: "width .8s cubic-bezier(.2,.9,.3,1)" },
+  tkPin: { position: "absolute", top: -2, width: 5, height: 12, borderRadius: 3,
+           transform: "translateX(50%)" },
+  tkReel: { display: "flex", gap: 10, overflowX: "auto", padding: "4px 2px 12px",
+            scrollSnapType: "x proximity" },
+  tkCard: { position: "relative", flexShrink: 0, width: 132, borderRadius: 18,
+            borderWidth: 2, borderStyle: "solid", padding: "14px 10px 12px",
+            display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
+            scrollSnapAlign: "center", overflow: "hidden", textAlign: "center" },
+  tkBadge: { position: "absolute", top: 8, insetInlineEnd: 8, width: 22, height: 22,
+             borderRadius: "50%", fontSize: 11, fontWeight: 700,
+             display: "flex", alignItems: "center", justifyContent: "center" },
+  tkNow: { position: "absolute", top: 10, insetInlineStart: 9, fontSize: 8.5,
+           fontWeight: 700, background: "#fff", borderRadius: 6, padding: "2px 6px" },
+  tkIc: { position: "relative", width: 62, height: 62, borderRadius: 20, marginTop: 12,
+          borderWidth: 1.5, borderStyle: "solid",
+          display: "flex", alignItems: "center", justifyContent: "center" },
+  tkLock: { position: "absolute", bottom: -3, insetInlineEnd: -3, width: 21, height: 21,
+            borderRadius: "50%", borderWidth: 2, borderStyle: "solid",
+            display: "flex", alignItems: "center", justifyContent: "center" },
+  tkName: { fontSize: 11.5, fontWeight: 700, lineHeight: 1.35, minHeight: 30 },
+  tkTier: { fontSize: 10, fontWeight: 600 },
+  tkNeed: { fontSize: 10.5, fontWeight: 700, borderRadius: 8, padding: "4px 10px", marginTop: 2 },
+  tkTip: { textAlign: "center", fontSize: 10, color: "var(--sp-mut)", marginTop: 2 },
+  pvBar: { display: "flex", alignItems: "center", gap: 7, marginBottom: 10,
+           background: "var(--sp-surf)", borderWidth: 1.5, borderStyle: "solid",
+           borderRadius: 15, padding: "7px 9px", boxShadow: "var(--sp-sh)" },
+  pvNav: { width: 30, height: 30, flexShrink: 0, borderRadius: 10,
+           borderWidth: 1, borderStyle: "solid", borderColor: "var(--sp-line)",
+           background: "var(--sp-bg)", color: "var(--sp-prim)", padding: 0,
+           display: "flex", alignItems: "center", justifyContent: "center" },
+  pvX: { flexShrink: 0, borderRadius: 10, borderWidth: 0, padding: "7px 11px",
+         fontSize: 11, fontWeight: 700, color: "#fff", background: "var(--sp-prim)" },
   trackB: { flexShrink: 0, borderWidth: 1, borderStyle: "solid", borderColor: "var(--sp-line)",
             background: "var(--sp-bg)", color: "var(--sp-prim)", borderRadius: 11,
             padding: "7px 12px", fontSize: 11.5, fontWeight: 700 },
