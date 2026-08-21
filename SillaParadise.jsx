@@ -349,13 +349,28 @@ function sat(hex) {
    الأجر غيبٌ بعيد، والجواهر رقمٌ يكبر بلا أثر. فالمراتب تجعل للتقدّم
    اسمًا يُنادى به وأثرًا يُرى في الأرض كلّها — يبلغ الطالب عتبةً فتترقّى
    جنّته وتتبدّل ألوانها. يضبطها صاحب المشروع من شاشة التحرير.        */
+/* ما تفتحه المراتب — كلٌّ منها شيءٌ يُرى في الجنّة، لا رقمٌ ولا لون.
+   وهي إضافاتٌ على المشهد، لا تمسّ الأبنية الـ٢٦ ولا مواضعها (§٣). */
+export const PERKS = {
+  jet:     { n:"نافورة البحرة",   ic:"fountain", d:"يتدفّق الماء من قلب الصحن." },
+  fly:     { n:"فراشات الزهور",   ic:"sparkle",  d:"فراشاتٌ تحوم حول زهورك." },
+  blossom: { n:"زهرٌ في الريح",   ic:"leaf",     d:"وريقاتٌ تتطاير في أرضك." },
+  birds:   { n:"طيورٌ تحلّق",     ic:"feather",  d:"أسرابٌ تعبر سماء جنّتك." },
+  lantern: { n:"فوانيس الممرّات", ic:"lamp",     d:"فوانيس تضيء دروبك." },
+  stars:   { n:"سماء النجوم",     ic:"star",     d:"نجومٌ تتلألأ فوق الجنّة." },
+};
+export const PERK_KEYS = Object.keys(PERKS);
+
 export const LS_TIERS = "silla.tiers.v1";
 const DEFAULT_TIERS = [
-  { id:"t1", n:"غَرْس",    g:0,    c:"#6BBFB2", d:"بدأتَ الغرس — أوّل أثرٍ في أرضك." },
-  { id:"t2", n:"رَوْضة",   g:250,  c:"#5AAE6B", d:"اخضرّت أرضك وصارت روضة." },
-  { id:"t3", n:"بُستان",   g:700,  c:"#C9A227", d:"أثمر غرسك، وصارت جنّتك بستانًا." },
-  { id:"t4", n:"جَنّة",    g:1500, c:"#E08A3C", d:"تمّت عمارتها، وصارت جنّةً تُرى." },
-  { id:"t5", n:"فِرْدَوْس", g:3000, c:"#B96FD0", d:"بلغتَ أعلاها — الفردوس الأعلى." },
+  { id:"t1", n:"غَرْس",    g:0,    c:"#6BBFB2", r:"",        d:"بدأتَ الغرس — أوّل أثرٍ في أرضك." },
+  { id:"t2", n:"رَوْضة",   g:200,  c:"#5AAE6B", r:"jet",     d:"اخضرّت أرضك، وتدفّقت بحرتها." },
+  { id:"t3", n:"بُستان",   g:500,  c:"#4FA84E", r:"fly",     d:"أثمر غرسك، وحامت عليه الفراشات." },
+  { id:"t4", n:"ظِلال",    g:900,  c:"#C9A227", r:"blossom", d:"امتدّت ظلالها، وتطاير زهرها." },
+  { id:"t5", n:"جَنّة",    g:1400, c:"#E08A3C", r:"birds",   d:"تمّت عمارتها، وعبرت سماءها الطير." },
+  { id:"t6", n:"نُور",     g:2000, c:"#D4A03C", r:"lantern", d:"أضاءت دروبها بالفوانيس." },
+  { id:"t7", n:"سَكينة",   g:2800, c:"#5D6FD0", r:"stars",   d:"سكنت تحت سماءٍ من نجوم." },
+  { id:"t8", n:"فِرْدَوْس", g:4000, c:"#B96FD0", r:"",        d:"بلغتَ أعلاها — الفردوس الأعلى." },
 ];
 export let TIERS = DEFAULT_TIERS.map((t) => ({ ...t }));
 let tierVer = 0;
@@ -365,7 +380,8 @@ export function setTiers(list) {
   TIERS = (Array.isArray(list) ? list : [])
     .filter((t) => t && t.id)
     .map((t) => ({ id:String(t.id), n:String(t.n||""), g:Math.max(0,Math.round(+t.g||0)),
-                   c:t.c||"#6BBFB2", d:String(t.d||"") }))
+                   c:t.c||"#6BBFB2", d:String(t.d||""),
+                   r:PERKS[t.r] ? t.r : "" }))
     .sort((a, b) => a.g - b.g);
   if (!TIERS.length) TIERS = defaultTiers();
   tierVer++; tierSubs.forEach((f) => f());
@@ -396,7 +412,14 @@ export function tierAt(gems) {
               ? Math.min(1, (gems - TIERS[i].g) / Math.max(1, TIERS[i + 1].g - TIERS[i].g))
               : 1 };
 }
+/* المكافآت المفتوحة عند رصيدٍ معيّن */
+export function perksAt(gems) {
+  const on = {};
+  TIERS.forEach((t) => { if (t.r && gems >= t.g) on[t.r] = 1; });
+  return on;
+}
 let TIERC = "#6BBFB2";          /* لون المرتبة — تقرؤه الأرض */
+let PERKON = {};                /* ما فُتح — تقرؤه حلقة الرسم */
 
 export const LS_SOUND = "silla.sound.v1";
 const AUD = { ctx: null, master: null, on: true };
@@ -1522,6 +1545,126 @@ function drawCached(nm, px, py, n) {
   X.drawImage(c.cv, 0, 0);
 }
 
+/* ════════ ما تفتحه المراتب — يُرسم فوق الأرض كل إطار ════════ */
+const RN = (i) => ((Math.sin(i * 12.9898) * 43758.5453) % 1 + 1) % 1;
+
+/* نجومٌ تتلألأ وسماءٌ تخفت — أوّل ما يُرسم */
+function perkStars() {
+  X.save();
+  X.fillStyle = DK() ? "rgba(10,20,34,.20)" : "rgba(28,40,86,.13)";
+  X.fillRect(0, 0, W, H);
+  for (let i = 0; i < 90; i++) {
+    const a = RN(i) * W, b = RN(i + 90) * H * .74;
+    const tw = .35 + Math.abs(Math.sin(ph * 1.4 + i)) * .65;
+    X.globalAlpha = tw * .9;
+    X.fillStyle = "#FFF6D8";
+    const r = 1.4 + RN(i + 7) * 2.2;
+    X.beginPath(); X.arc(a, b, r, 0, 7); X.fill();
+    if (r > 2.6) {
+      X.globalAlpha = tw * .5; X.lineWidth = 1; X.strokeStyle = "#FFF6D8";
+      X.beginPath(); X.moveTo(a - r * 2.4, b); X.lineTo(a + r * 2.4, b);
+      X.moveTo(a, b - r * 2.4); X.lineTo(a, b + r * 2.4); X.stroke();
+    }
+  }
+  X.restore();
+}
+
+/* فوانيس على حافّتَي الممرّين */
+function perkLanterns() {
+  const spots = [];
+  for (let i = 0; i < 6; i++) { const t = 120 + i * 160; spots.push([t, 372], [t, 468]); }
+  for (let i = 0; i < 4; i++) { const t = 130 + i * 170; spots.push([486, t], [584, t]); }
+  spots.forEach(([wx, wy], i) => {
+    const px = IX(wx, wy), py = IY(wx, wy);
+    shadow(px, py, 4, 2, .16);
+    X.strokeStyle = DK() ? "#3E4A44" : "#6B6250"; X.lineWidth = 2.4; X.lineCap = "round";
+    X.beginPath(); X.moveTo(px, py); X.lineTo(px, py - 17); X.stroke();
+    const fl = .72 + Math.sin(ph * 2.1 + i) * .22;
+    X.save(); X.globalAlpha = fl * .5;
+    const g = X.createRadialGradient(px, py - 21, 0, px, py - 21, 22);
+    g.addColorStop(0, "#FFDE93"); g.addColorStop(1, "rgba(255,222,147,0)");
+    X.fillStyle = g; X.beginPath(); X.arc(px, py - 21, 22, 0, 7); X.fill(); X.restore();
+    X.fillStyle = sat("#F6D488");
+    X.beginPath(); X.ellipse(px, py - 21, 3.6, 5, 0, 0, 7); X.fill(); edge(1);
+  });
+}
+
+/* نافورة في البحرة */
+function perkJet() {
+  const px = IX(535, 420), py = IY(535, 420);
+  X.save();
+  X.strokeStyle = "rgba(210,240,255,.72)"; X.lineCap = "round";
+  for (let i = 0; i < 9; i++) {
+    const t = ((ph * .9 + i / 9) % 1);
+    const hgt = 30 * Math.sin(Math.PI * t);
+    const sp = (i - 4) * 1.5;
+    X.globalAlpha = (1 - t) * .8; X.lineWidth = 2.4 - t;
+    X.beginPath(); X.moveTo(px + sp * t, py - hgt);
+    X.lineTo(px + sp * t * 1.3, py - hgt + 5); X.stroke();
+  }
+  for (let r = 0; r < 3; r++) {
+    const t = ((ph * .55 + r / 3) % 1);
+    X.globalAlpha = (1 - t) * .38; X.lineWidth = 1.6; X.strokeStyle = "#DCF2FF";
+    X.beginPath(); X.ellipse(px, py + 2, 8 + t * 26, (8 + t * 26) * IZ * .55, 0, 0, 7); X.stroke();
+  }
+  X.restore();
+}
+
+/* فراشات حول حقل الزهور */
+function perkFly() {
+  const C = ["#F2C14E", "#E8657F", "#B87FD0", "#6FD08C"];
+  X.save();
+  for (let i = 0; i < 9; i++) {
+    const t = ph * .5 + i * 1.7;
+    const wx = 610 + Math.sin(t * .8 + i) * 78, wy = 700 + Math.cos(t * .6 + i * 2) * 46;
+    const px = IX(wx, wy), py = IY(wx, wy) - 20 - Math.sin(t * 2) * 8;
+    const f = Math.abs(Math.sin(t * 7));
+    X.fillStyle = C[i % 4]; X.globalAlpha = .92;
+    X.beginPath(); X.ellipse(px - 2.4, py, 2.6, 1.4 + f * 2.4, -.5, 0, 7); X.fill();
+    X.beginPath(); X.ellipse(px + 2.4, py, 2.6, 1.4 + f * 2.4, .5, 0, 7); X.fill();
+  }
+  X.restore();
+}
+
+/* وريقاتٌ تتطاير */
+function perkBlossom() {
+  X.save();
+  for (let i = 0; i < 26; i++) {
+    const t = (ph * .18 + RN(i)) % 1;
+    const wx = IN.x + RN(i + 3) * IN.w, wy = IN.y + t * IN.h;
+    const px = IX(wx, wy) + Math.sin(ph * 1.6 + i) * 16, py = IY(wx, wy) - 34 * (1 - t);
+    X.globalAlpha = Math.sin(Math.PI * t) * .8;
+    X.fillStyle = i % 3 ? "#F6C7D6" : "#FBE6C0";
+    X.beginPath();
+    X.ellipse(px, py, 3.2, 1.8, ph * 2 + i, 0, 7); X.fill();
+  }
+  X.restore();
+}
+
+/* أسرابٌ تعبر السماء */
+function perkBirds() {
+  X.save();
+  X.strokeStyle = DK() ? "rgba(226,238,236,.8)" : "rgba(52,70,64,.72)";
+  X.lineCap = "round"; X.lineJoin = "round";
+  for (let f = 0; f < 2; f++) {
+    const base = ((ph * .09 + f * .5) % 1.25) * (W + 300) - 150;
+    for (let i = 0; i < 5; i++) {
+      const px = base - i * 26 + (i % 2) * 9;
+      const py = 76 + f * 54 + i * 9 + Math.sin(ph * 1.1 + i + f) * 5;
+      const w = 6 + (i % 2) * 1.6, fl = Math.sin(ph * 4.4 + i * .7) * 3.4;
+      X.lineWidth = 1.9;
+      X.beginPath();
+      X.moveTo(px - w, py + fl); X.quadraticCurveTo(px, py - 2.4, px + w, py + fl);
+      X.stroke();
+    }
+  }
+  X.restore();
+}
+
+function perksBack()  { if (PERKON.stars) perkStars(); if (PERKON.lantern) perkLanterns(); }
+function perksFront() { if (PERKON.jet) perkJet(); if (PERKON.fly) perkFly();
+                        if (PERKON.blossom) perkBlossom(); if (PERKON.birds) perkBirds(); }
+
 /* الأرض ثابتة لا تتغيّر — تُرسم مرّة واحدة لكل ثيم وتُنسخ كصورة كل إطار.
    بدونها نُعيد ٧٢٠ عملية رسم ستّين مرّة في الثانية على الجوال.          */
 const GCACHE = { light: null, dark: null, lightG: null, darkG: null };
@@ -1607,7 +1750,9 @@ export function Village({ st, theme = "light" }) {
   /* المرتبة: تلوّن حدّ الأرض، ويُحتفى ببلوغ عتبةٍ جديدة */
   const rank = tierAt(allGems);
   TIERC = rank.cur.c;
+  PERKON = perksAt(allGems);
   const [rankUp, setRankUp] = useState(null);
+  const [track, setTrack] = useState(false);
   useEffect(() => {
     let seen = -1;
     try { seen = parseInt(window.localStorage.getItem(LS_RANK), 10); } catch (e) { /* تجاهل */ }
@@ -1737,6 +1882,7 @@ export function Village({ st, theme = "light" }) {
         return true;
       };
 
+      perksBack();
       BACK.forEach((nm) => {
         const it = ITEMS.find((i) => i.i === nm); if (!it) return;
         const [a, b] = SPOT[nm], px = IX(a, b), py = IY(a, b);
@@ -1797,6 +1943,8 @@ export function Village({ st, theme = "light" }) {
         });
         X.restore();
       }
+
+      perksFront();
 
       /* الغبار فوق الجميع، ثم يُنسى */
       dust.current = dust.current.filter((q) => {
@@ -1882,7 +2030,10 @@ export function Village({ st, theme = "light" }) {
               : "بلغتَ أعلى المراتب"}
           </div>
         </div>
+        <button style={S.trackB} onClick={() => { SFX.open(); setTrack(true); }}>المسار</button>
       </div>
+
+      {track && <Track gems={allGems} onClose={() => setTrack(false)} />}
 
       {/* شريط الشهر — الجنّة تتبدّل بتبدّله */}
       <MonthBar start={start} setStart={setStart} sub={`${fmt(monthGems)} جوهرة هذا الشهر`} />
@@ -2385,6 +2536,102 @@ const SoundBtn = () => {
     </button>
   );
 };
+/* ════ مسار الجنّة ════
+   سُلَّمُ المراتب بما تفتحه كلٌّ منها. أهمّ ما فيه أن **المقفل يُرى**:
+   الطالب يعرف ما ينتظره فيسعى إليه، لا أن يُفاجأ به بعد بلوغه. */
+function Track({ gems, onClose }) {
+  useTiers();
+  const here = tierAt(gems).i;
+  return (
+    <Overlay onClose={onClose} wide z={92}>
+      <div style={{ textAlign: "center", marginBottom: 4 }}>
+        <div style={{ fontSize: 16, fontWeight: 700 }}>مسار الجنّة</div>
+        <div style={S.lbl}>{fmt(gems)} جوهرة — وكلّ مرتبةٍ تفتح شيئًا يُرى في أرضك</div>
+      </div>
+
+      <div style={{ marginTop: 14 }}>
+        {TIERS.map((t, i) => {
+          const got = gems >= t.g;
+          const now = i === here;
+          const perk = t.r ? PERKS[t.r] : null;
+          const prev = TIERS[i - 1];
+          const seg = !prev ? 1
+            : Math.max(0, Math.min(1, (gems - prev.g) / Math.max(1, t.g - prev.g)));
+          return (
+            <div key={t.id} style={S.trRow}>
+              {/* السكّة والعقدة */}
+              <div style={S.trRail}>
+                {i > 0 && (
+                  <div style={S.trLineWrap}>
+                    <div style={{ ...S.trLine, height: `${Math.round(seg * 100)}%`,
+                                  background: t.c }} />
+                  </div>
+                )}
+                <div style={{ ...S.trNode,
+                  background: got ? t.c : "var(--sp-bg)",
+                  borderColor: got ? t.c : "var(--sp-line)",
+                  color: got ? "#fff" : "var(--sp-mut)",
+                  ...(now ? { boxShadow: `0 0 0 4px ${t.c}33` } : {}) }}>
+                  {got ? "✓" : ar(i + 1)}
+                </div>
+              </div>
+
+              {/* المكافأة */}
+              <div style={{ ...S.trCard,
+                            borderColor: now ? t.c : "var(--sp-line)",
+                            opacity: got ? 1 : .72 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                  <div style={{ ...S.trIc,
+                                background: got ? t.c : "var(--sp-bg)",
+                                borderColor: got ? t.c : "var(--sp-line)" }}>
+                    {perk ? (
+                      <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round"
+                        strokeLinejoin="round"
+                        style={{ width: 17, height: 17, stroke: got ? "#fff" : "var(--sp-mut)" }}
+                        dangerouslySetInnerHTML={{ __html: svg(perk.ic) }} />
+                    ) : (
+                      <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round"
+                        strokeLinejoin="round"
+                        style={{ width: 15, height: 15, stroke: got ? "#fff" : "var(--sp-mut)" }}>
+                        <path d="m12 3 2.6 5.3 5.9.8-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8L3.5 9.1l5.9-.8z" />
+                      </svg>
+                    )}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 700, color: got ? t.c : "var(--sp-txt)" }}>
+                      {perk ? perk.n : `لقب «${t.n}»`}
+                    </div>
+                    {/* خانتان متباعدتان — النقطة الملاصقة لرقم تُقرأ جزءًا منه */}
+                    <div style={S.trSub}>
+                      <span>{t.n}</span><span style={S.aBSep}>·</span>
+                      <span>{fmt(t.g)} جوهرة</span>
+                    </div>
+                  </div>
+                  {!got && (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="var(--sp-mut)" strokeWidth="2"
+                      strokeLinecap="round" style={{ width: 14, height: 14, flexShrink: 0 }}>
+                      <rect x="4" y="10" width="16" height="11" rx="2" />
+                      <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+                    </svg>
+                  )}
+                </div>
+                <div style={S.trD}>{perk ? perk.d : t.d}</div>
+                {!got && (
+                  <div style={{ ...S.trNeed, color: t.c }}>
+                    بقي {fmt(t.g - gems)} جوهرة
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <button style={S.dlgX} onClick={onClose}>إغلاق</button>
+    </Overlay>
+  );
+}
+
 /* مفتاح الطابع: هادئ (هوية الموقع) ⟷ لعبة (حدود وألوان مشبعة) */
 const SkinBtn = () => {
   useSkin();
@@ -2716,6 +2963,31 @@ export function SunanEditor({ embedded = false }) {
           <div style={S.aLbl}>ما يُقال عند بلوغها</div>
           <textarea value={t.d} rows={2} style={S.aArea}
             onChange={(e) => patchTier(t.id, "d", e.target.value)} />
+          <div style={S.aLbl}>ما تفتحه — يظهر في الجنّة عند بلوغها</div>
+          <div style={S.edPerks}>
+            <button onClick={() => patchTier(t.id, "r", "")}
+              style={{ ...S.edPerk, ...(!t.r ? { borderColor: t.c, background: t.c + "1A" } : {}) }}>
+              <span style={S.edPerkN}>لقب فقط</span>
+            </button>
+            {PERK_KEYS.map((k) => {
+              const taken = TIERS.some((q) => q.r === k && q.id !== t.id);
+              const on = t.r === k;
+              return (
+                <button key={k} disabled={taken}
+                  onClick={() => patchTier(t.id, "r", k)}
+                  style={{ ...S.edPerk, ...(on ? { borderColor: t.c, background: t.c + "1A" } : {}),
+                           ...(taken ? { opacity: .35 } : {}) }}>
+                  <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round"
+                    strokeLinejoin="round" style={{ width: 16, height: 16,
+                      stroke: on ? t.c : "var(--sp-mut)" }}
+                    dangerouslySetInnerHTML={{ __html: svg(PERKS[k].ic) }} />
+                  <span style={S.edPerkN}>{PERKS[k].n}</span>
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ ...S.lbl, marginTop: 6 }}>الباهت مأخوذٌ لمرتبةٍ أخرى.</div>
+
           <div style={S.aLbl}>لونها — يصبغ حدّ أرض الجنّة</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {SEC_PALETTE.map((c) => (
@@ -3034,6 +3306,32 @@ const S = {
   rankBar: { height: 7, borderRadius: 5, background: "var(--sp-bg)", overflow: "hidden" },
   rankFill: { height: "100%", borderRadius: 5, transition: "width .7s cubic-bezier(.2,.9,.3,1)" },
   rankT: { fontSize: 9.5, color: "var(--sp-mut)", marginTop: 4 },
+  edPerks: { display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 6 },
+  edPerk: { display: "flex", alignItems: "center", gap: 7, borderRadius: 11,
+            borderWidth: 1.5, borderStyle: "solid", borderColor: "var(--sp-line)",
+            background: "var(--sp-bg)", padding: "8px 9px", textAlign: "right" },
+  edPerkN: { fontSize: 10.5, fontWeight: 600, color: "var(--sp-txt)" },
+  trackB: { flexShrink: 0, borderWidth: 1, borderStyle: "solid", borderColor: "var(--sp-line)",
+            background: "var(--sp-bg)", color: "var(--sp-prim)", borderRadius: 11,
+            padding: "7px 12px", fontSize: 11.5, fontWeight: 700 },
+  trRow: { display: "flex", gap: 10, alignItems: "stretch" },
+  trRail: { width: 30, flexShrink: 0, display: "flex", flexDirection: "column",
+            alignItems: "center" },
+  trLineWrap: { width: 3, flex: 1, minHeight: 16, borderRadius: 2,
+                background: "var(--sp-line)", display: "flex", flexDirection: "column",
+                justifyContent: "flex-end", overflow: "hidden" },
+  trLine: { width: "100%", borderRadius: 2, transition: "height .6s ease" },
+  trNode: { width: 28, height: 28, borderRadius: "50%", flexShrink: 0, margin: "4px 0",
+            borderWidth: 2, borderStyle: "solid", fontSize: 12, fontWeight: 700,
+            display: "flex", alignItems: "center", justifyContent: "center" },
+  trCard: { flex: 1, minWidth: 0, marginBottom: 10, borderWidth: 1.5, borderStyle: "solid",
+            borderRadius: 14, padding: "10px 12px", background: "var(--sp-surf2)" },
+  trIc: { width: 34, height: 34, borderRadius: 11, flexShrink: 0, borderWidth: 1.5,
+          borderStyle: "solid", display: "flex", alignItems: "center", justifyContent: "center" },
+  trSub: { fontSize: 9.5, color: "var(--sp-mut)", marginTop: 3,
+           display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0 5px" },
+  trD: { fontSize: 10, color: "var(--sp-mut)", lineHeight: 1.7, marginTop: 7 },
+  trNeed: { fontSize: 10, fontWeight: 700, marginTop: 5 },
   rankBig: { fontSize: 30, fontWeight: 700, lineHeight: 1.3, margin: "2px 0 8px" },
   rankRing: { width: 54, height: 54, margin: "0 auto", borderRadius: "50%",
               borderWidth: 3, borderStyle: "solid" },
