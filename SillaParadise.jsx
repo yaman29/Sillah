@@ -288,7 +288,7 @@ export function useSunanVersion() {
    القرى: حدود داكنة سميكة وألوان مشبعة وظلال أعمق — يفصل البرنامج
    بصريًّا عن الموقع، فهو خيارُ صاحب المشروع لا الأصل.                    */
 export const LS_SKIN = "silla.skin.v1";
-const SK = { game: false };
+const SK = { game: true };      /* الأصل: مفعمٌ لا هادئ */
 let skinVer = 0;
 const skinSubs = new Set();
 export const gameSkin = () => SK.game;
@@ -301,7 +301,7 @@ export function setSkin(on) {
   try { window.localStorage.setItem(LS_SKIN, SK.game ? "1" : "0"); } catch (e) { /* تجاهل */ }
 }
 export function hydrateSkin() {
-  try { if (window.localStorage.getItem(LS_SKIN) === "1") setSkin(true); } catch (e) { /* تجاهل */ }
+  try { if (window.localStorage.getItem(LS_SKIN) === "0") setSkin(false); } catch (e) { /* تجاهل */ }
 }
 export function useSkin() {
   return useSyncExternalStore(
@@ -335,8 +335,9 @@ function sat(hex) {
     h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
     h /= 6;
   }
-  sv = Math.min(1, sv * 1.55 + .06);
-  const L = Math.min(.96, Math.max(.05, l + (l > .5 ? .05 : -.06)));
+  sv = Math.min(1, sv * 2.35 + .16);
+  /* ودفعُ الفاتح إلى الفتوح والداكن إلى العمق — التباين هو ما يُحيي المشهد */
+  const L = Math.min(.95, Math.max(.06, l + (l > .55 ? .09 : l < .34 ? -.10 : 0)));
   const q = L < .5 ? L * (1 + sv) : L + sv - L * sv, pq = 2 * L - q;
   const ch = (t) => {
     t = (t + 1) % 1;
@@ -368,14 +369,14 @@ export const LS_TIERS = "silla.tiers.v1";
 /* ألوانٌ متباعدة عمدًا: المسار يُقرأ قوسَ ألوانٍ صاعدًا، لا تدرّجًا أخضرَ
    واحدًا — والتباعد هو ما يجعل كلَّ مرتبةٍ تُميَّز من بعيد. */
 const DEFAULT_TIERS = [
-  { id:"t1", n:"غَرْس",    g:0,    c:"#3FBBA4", r:"",        d:"بدأتَ الغرس — أوّل أثرٍ في أرضك." },
-  { id:"t2", n:"رَوْضة",   g:200,  c:"#5FC74A", r:"jet",     d:"اخضرّت أرضك، وتدفّقت بحرتها." },
-  { id:"t3", n:"بُستان",   g:500,  c:"#E8B62C", r:"flag",    d:"عَلَت راياتُك على السور." },
-  { id:"t4", n:"ظِلال",    g:900,  c:"#F0873C", r:"blossom", d:"امتدّت ظلالها، وتطاير زهرها." },
-  { id:"t5", n:"جَنّة",    g:1400, c:"#E8566E", r:"birds",   d:"تمّت عمارتها، وعبرت سماءها الطير." },
-  { id:"t6", n:"نُور",     g:2000, c:"#8E5FE0", r:"lantern", d:"أضاءت دروبها بالفوانيس." },
-  { id:"t7", n:"سَكينة",   g:2800, c:"#4E7FE0", r:"stars",   d:"سكنت تحت سماءٍ من نجوم." },
-  { id:"t8", n:"فِرْدَوْس", g:4000, c:"#D9A441", r:"",        d:"بلغتَ أعلاها — الفردوس الأعلى." },
+  { id:"t1", n:"غَرْس",    g:0,    c:"#00D6A6", r:"",        d:"بدأتَ الغرس — أوّل أثرٍ في أرضك." },
+  { id:"t2", n:"رَوْضة",   g:200,  c:"#4BE04B", r:"jet",     d:"اخضرّت أرضك، وتدفّقت بحرتها." },
+  { id:"t3", n:"بُستان",   g:500,  c:"#FFC414", r:"flag",    d:"عَلَت راياتُك على السور." },
+  { id:"t4", n:"ظِلال",    g:900,  c:"#FF7A18", r:"blossom", d:"امتدّت ظلالها، وتطاير زهرها." },
+  { id:"t5", n:"جَنّة",    g:1400, c:"#FF3D68", r:"birds",   d:"تمّت عمارتها، وعبرت سماءها الطير." },
+  { id:"t6", n:"نُور",     g:2000, c:"#A03CFF", r:"lantern", d:"أضاءت دروبها بالفوانيس." },
+  { id:"t7", n:"سَكينة",   g:2800, c:"#1E90FF", r:"stars",   d:"سكنت تحت سماءٍ من نجوم." },
+  { id:"t8", n:"فِرْدَوْس", g:4000, c:"#FFD426", r:"",        d:"بلغتَ أعلاها — الفردوس الأعلى." },
 ];
 export let TIERS = DEFAULT_TIERS.map((t) => ({ ...t }));
 let tierVer = 0;
@@ -754,9 +755,10 @@ function trunk(px, py, w, h, cLit, cDark) {
   X.lineTo(px, py - h); X.lineTo(px, py); X.closePath(); X.fill();
 }
 
+/* تدرّجٌ جانبيّ — يمرّ من التشبّع كغيره، وإلا بقي السور وما يستعمله باهتًا */
 function lit(x, y, w, c1, c2) {
   const g = X.createLinearGradient(x - w / 2, y, x + w / 2, y);
-  g.addColorStop(0, c1); g.addColorStop(1, c2); return g;
+  g.addColorStop(0, sat(c1)); g.addColorStop(1, sat(c2)); return g;
 }
 
 const WALL=(function(){
@@ -776,11 +778,13 @@ DRAW.fort=(x,y,n)=>{
  for(let i=0;i<k;i++){const[a,b,o]=WALL[i];seg.push({a,b,o,d:a+b})}
  seg.sort((p,q)=>p.d-q.d);
  /* حجر كلسيّ كحجر الصحن — لا رمادي يخالفه */
- const top=DK()?'#4E5A50':'#E8DEC7',rgt=DK()?'#3A4740':'#CFC1A2',lft=DK()?'#28332E':'#AC9E80';
+ /* حجرٌ رمليّ دافئ: الكِرَم شبه محايد، والتشبّع لا يُخرج لونًا من لا لون —
+    فكان السور يبتلع المشهد ببياضه. */
+ const top=DK()?'#5E5334':'#E6C783',rgt=DK()?'#463D26':'#C4A159',lft=DK()?'#2E2818':'#96773E';
  seg.forEach(({a,b,o})=>{
   const sx=o==='h'?30:16,sy=o==='h'?16:30;
   isoBox(a,b,sx,sy,26,top,rgt,lft);                    /* بدن البرج */
-  isoBox(a,b,sx*1.12,sy*1.12,5,DK()?'#5C6A5E':'#F2EADA',rgt,lft,26);  /* شرفة تعلوه */
+  isoBox(a,b,sx*1.12,sy*1.12,5,DK()?'#6E6140':'#F0DCA6',rgt,lft,26);  /* شرفة تعلوه */
  })};
 
 /* ── بيوت الرواتب: حيّ يصل ٣٠ بيتًا ── */
@@ -906,85 +910,92 @@ DRAW.garden=(x,y,n)=>{const k=Math.min(Math.round(n*40/DCAP),40);
    المستوى ٠ مصلّى بسيط، ثم تُضاف القبّة فالأبراج فالمئذنة فالذهب. */
 let MLV = 0;                      /* مستوى المسجد = ترتيب المرتبة */
 DRAW.dome=(x,y,lv)=>{
- const L=Math.max(0,Math.min(7,lv|0)), g=L/7, s=.72+g*.5;
+ const L=Math.max(0,Math.min(7,lv|0)), g=L/7, s=.60+g*.62;
  const [cx,cy]=SPOT.dome;
- const SX=42*s,SY=28*s;
+ const SX=(30+L*2.6)*s,SY=(20+L*1.8)*s;
  EXTENT.dome={x0:cx-SX,x1:cx+SX,y0:cy-SY,y1:cy+SY};
  const px=IX(cx,cy),py=IY(cx,cy);
- const PH=8*s,HH=(24+L*1.9)*s,HW=SX*.8,HD=SY*.78;
+ const PH=7*s,HH=(26+L*2.2)*s,HW=SX*.8,HD=SY*.78;
+ const gold1=L>=4?'#FFF0BE':'#F6E7C2', gold2=L>=4?'#F3C93F':'#D8C38A', gold3=L>=4?'#B07E14':'#9E8C5A';
 
- /* هالة النور — تشتدّ بالمستوى */
- if(L>=5){X.save();X.globalAlpha=(.10+g*.20)+Math.sin(ph*.9)*.05;
-  const gy=py-PH-HH-40*s;
-  const gl=X.createRadialGradient(px,gy,0,px,gy,150*s);
-  gl.addColorStop(0,'#FFE9A8');gl.addColorStop(.5,'rgba(255,220,140,.26)');
-  gl.addColorStop(1,'rgba(255,233,168,0)');
-  X.fillStyle=gl;X.beginPath();X.arc(px,gy,150*s,0,7);X.fill();X.restore()}
+ /* هالة النور — تشتدّ بالمستوى وتبدأ من أوّله */
+ X.save();X.globalAlpha=(.08+g*.24)+Math.sin(ph*.9)*.05;
+ const gy=py-PH-HH-46*s;
+ const gl=X.createRadialGradient(px,gy,0,px,gy,(90+L*10)*s);
+ gl.addColorStop(0,'#FFE9A8');gl.addColorStop(.5,'rgba(255,220,140,.3)');
+ gl.addColorStop(1,'rgba(255,233,168,0)');
+ X.fillStyle=gl;X.beginPath();X.arc(px,gy,(90+L*10)*s,0,7);X.fill();X.restore();
 
- const T=DK()?'#D8C99E':'#F7F0DC',R=DK()?'#B6A77D':'#E0D4B6',Lf=DK()?'#8A7C56':'#BCAE8C';
- /* مصطبة */
- isoBox(cx,cy,SX,SY,PH,DK()?'#C4B68E':'#EAE1C8',DK()?'#A49670':'#D2C6A8',DK()?'#807454':'#B0A488');
- /* بيت الصلاة */
+ const T=DK()?'#DCCDA0':'#FBF4E0',R=DK()?'#BAAB80':'#E6DABC',Lf=DK()?'#8E8058':'#C2B490';
+ isoBox(cx,cy,SX,SY,PH,DK()?'#C8BA92':'#EEE5CC',DK()?'#A89A74':'#D6CAAC',DK()?'#847858':'#B4A88C');
  isoBox(cx,cy,HW,HD,HH,T,R,Lf,PH);
- /* قناطر الوجه — تضيء من المستوى ٣ */
- for(let i=-1;i<=1;i++){
-  const wx=cx+i*HW*.55,bx=IX(wx,cy+HD),by=IY(wx,cy+HD)-PH;
-  const aw=7.5*s,ah=HH*.72;
-  X.fillStyle=DK()?'#101F1A':'#33513F';
-  X.beginPath();X.moveTo(bx-aw,by);X.lineTo(bx-aw,by-ah*.52);
-  X.quadraticCurveTo(bx,by-ah,bx+aw,by-ah*.52);X.lineTo(bx+aw,by);X.closePath();X.fill();
+
+ /* قناطر الوجه — واحدة في الأصغر، وثلاثٌ فأكثر مع الكبر */
+ const arch=L<2?1:L<5?3:5;
+ for(let i=0;i<arch;i++){
+  const u=arch===1?0:(i/(arch-1)-.5)*2;
+  const wx=cx+u*HW*.62,bx=IX(wx,cy+HD),by=IY(wx,cy+HD)-PH;
+  const aw=HW*(arch===1?.34:.17),ah=HH*.74;
+  X.fillStyle=DK()?'#0E1E19':'#2E4C3B';
+  X.beginPath();X.moveTo(bx-aw,by);X.lineTo(bx-aw,by-ah*.5);
+  X.quadraticCurveTo(bx,by-ah,bx+aw,by-ah*.5);X.lineTo(bx+aw,by);X.closePath();X.fill();
   edge(1.1);
-  if(L>=3){X.fillStyle='#FFE3A0';X.globalAlpha=.4+g*.35;
-   X.beginPath();X.ellipse(bx,by-ah*.42,aw*.5,ah*.19,0,0,7);X.fill();X.globalAlpha=1}}
- /* أبراج الأركان — من المستوى ٢ */
- if(L>=2){[[-1,-1],[1,-1],[-1,1],[1,1]].forEach(([dx,dy],qi)=>{
-  const tw=4.6*s,twx=cx+dx*SX*.9,twy=cy+dy*SY*.86,TH=HH*(1.1+g*.3);
+  X.fillStyle='#FFDF95';X.globalAlpha=.35+g*.4;
+  X.beginPath();X.ellipse(bx,by-ah*.4,aw*.5,ah*.18,0,0,7);X.fill();X.globalAlpha=1}
+
+ /* أبراج الأركان — تظهر من المستوى ٢ */
+ if(L>=2){[[-1,-1],[1,-1],[-1,1],[1,1]].slice(0,L>=3?4:2).forEach(([dx,dy],qi)=>{
+  const tw=4.4*s,twx=cx+dx*SX*.9,twy=cy+dy*SY*.86,TH=HH*(1.06+g*.26);
   isoBox(twx,twy,tw,tw,TH,T,R,Lf,PH);
   const tx=IX(twx,twy),ty=IY(twx,twy)-PH-TH;
-  X.fillStyle=sat(L>=5?(DK()?'#C9A54A':'#D8B45E'):(DK()?'#9C8F68':'#C4B79A'));
+  X.fillStyle=sat(gold2);
   X.beginPath();X.moveTo(tx-tw*1.5,ty);
-  X.bezierCurveTo(tx-tw*1.5,ty-tw*2.4,tx+tw*1.5,ty-tw*2.4,tx+tw*1.5,ty);
+  X.bezierCurveTo(tx-tw*1.5,ty-tw*2.5,tx+tw*1.5,ty-tw*2.5,tx+tw*1.5,ty);
   X.closePath();X.fill();edge(1);
-  /* رايات من المستوى ٦ */
-  if(L>=6){const fw=Math.sin(ph*2+qi)*2.2;
+  if(L>=6){const fw=Math.sin(ph*2.4+qi)*2.4;
    X.fillStyle=sat(TIERC);X.beginPath();
-   X.moveTo(tx,ty-tw*2.4);X.lineTo(tx+11*s+fw,ty-tw*2.4+4*s);
-   X.lineTo(tx,ty-tw*2.4+8*s);X.closePath();X.fill();edge(.9)}})}
- /* مئذنة — من المستوى ٤ */
- if(L>=4){const mx=cx-SX*1.02,my=cy+SY*.5,MH=HH*1.9;
-  isoBox(mx,my,4*s,4*s,MH,T,R,Lf,PH);
+   X.moveTo(tx,ty-tw*2.5);X.lineTo(tx+12*s+fw,ty-tw*2.5+4*s);
+   X.lineTo(tx,ty-tw*2.5+8.5*s);X.closePath();X.fill();edge(.9)}})}
+
+ /* مئذنة — من أوّل مستوى، وتطول وتتعدّد */
+ const mins=L>=4?[[-1.02,.5],[1.02,.5]]:[[-1.02,.5]];
+ mins.forEach(([ux,uy])=>{
+  const mx=cx+ux*SX,my=cy+uy*SY,MH=HH*(1.5+g*.7),mw=3.4*s;
+  isoBox(mx,my,mw,mw,MH,T,R,Lf,PH);
   const ax=IX(mx,my),ay=IY(mx,my)-PH-MH;
-  X.fillStyle=sat(T);X.beginPath();X.ellipse(ax,ay,7*s,3*s,0,0,7);X.fill();edge(1);
-  X.fillStyle=sat(L>=5?'#D8B45E':'#C4B79A');
-  X.beginPath();X.moveTo(ax-5*s,ay-2*s);
-  X.bezierCurveTo(ax-5*s,ay-11*s,ax+5*s,ay-11*s,ax+5*s,ay-2*s);X.closePath();X.fill();edge(1)}
- /* الرقبة والقبّة — من المستوى ١ */
- if(L>=1){
-  const NH=(11+L*1.6)*s,NW=SX*.32;
-  isoBox(cx,cy,NW,SY*.32,NH,T,R,Lf,PH+HH);
-  const NY=py-PH-HH-NH;
-  if(L>=3){X.fillStyle='#FFE3A0';X.globalAlpha=.65;
-   [-1,0,1].forEach((i)=>{const wx2=IX(cx+i*NW*.5,cy+SY*.32);
-    X.beginPath();X.ellipse(wx2,NY+NH*.5,2.2*s,4*s,0,0,7);X.fill()});X.globalAlpha=1}
-  const RR=NW*(1.28+g*.28);
-  X.fillStyle=sat(L>=5?(DK()?'#B8922E':'#C9A54A'):(DK()?'#9C8F68':'#C8BB9E'));
-  X.beginPath();X.ellipse(px,NY,RR*1.06,RR*.26,0,0,7);X.fill();edge(1.2);
-  const dg=X.createRadialGradient(px-RR*.36,NY-RR*.62,3,px,NY,RR*1.25);
-  if(L>=5){dg.addColorStop(0,sat('#FCF2CC'));dg.addColorStop(.5,sat('#E8C874'));
-           dg.addColorStop(1,sat('#A88232'))}
-  else{dg.addColorStop(0,sat(DK()?'#DACDA6':'#F2EAD4'));
-       dg.addColorStop(1,sat(DK()?'#8E8260':'#B8AA8C'))}
-  X.fillStyle=dg;
-  X.beginPath();X.moveTo(px-RR,NY);
-  X.bezierCurveTo(px-RR,NY-RR*1.34,px+RR,NY-RR*1.34,px+RR,NY);
-  X.closePath();X.fill();edge(1.4);
-  /* الصاري والهلال — من المستوى ٥ */
-  if(L>=5){const FY=NY-RR;
-   X.strokeStyle=sat('#C9A54A');X.lineWidth=2.4*s;X.lineCap='round';
-   X.beginPath();X.moveTo(px,FY);X.lineTo(px,FY-14*s);X.stroke();
-   X.fillStyle=sat('#D8B45E');X.beginPath();
-   X.arc(px,FY-19*s,5*s,0,7);X.arc(px+2.2*s,FY-20.3*s,4.3*s,0,7);
-   X.fill('evenodd');edge(1)}}};
+  /* شرفة المؤذّن */
+  X.fillStyle=sat(R);X.beginPath();X.ellipse(ax,ay+2*s,mw*2.1,mw*.95,0,0,7);X.fill();edge(1);
+  X.fillStyle=sat(gold2);
+  X.beginPath();X.moveTo(ax-mw*1.5,ay-1*s);
+  X.bezierCurveTo(ax-mw*1.5,ay-11*s,ax+mw*1.5,ay-11*s,ax+mw*1.5,ay-1*s);
+  X.closePath();X.fill();edge(1);
+  X.strokeStyle=sat(gold2);X.lineWidth=1.6*s;X.lineCap='round';
+  X.beginPath();X.moveTo(ax,ay-10*s);X.lineTo(ax,ay-16*s);X.stroke()});
+
+ /* الرقبة والقبّة — موجودتان من المستوى ٠ */
+ const NH=(10+L*1.7)*s,NW=SX*.32;
+ isoBox(cx,cy,NW,SY*.32,NH,T,R,Lf,PH+HH);
+ const NY=py-PH-HH-NH;
+ X.fillStyle='#FFDF95';X.globalAlpha=.35+g*.4;
+ [-1,0,1].forEach((i)=>{const wx2=IX(cx+i*NW*.5,cy+SY*.32);
+  X.beginPath();X.ellipse(wx2,NY+NH*.52,2.1*s,3.8*s,0,0,7);X.fill()});
+ X.globalAlpha=1;
+ const RR=NW*(1.3+g*.3);
+ X.fillStyle=sat(gold3);
+ X.beginPath();X.ellipse(px,NY,RR*1.06,RR*.26,0,0,7);X.fill();edge(1.2);
+ const dg=X.createRadialGradient(px-RR*.36,NY-RR*.62,3,px,NY,RR*1.25);
+ dg.addColorStop(0,sat(gold1));dg.addColorStop(.52,sat(gold2));dg.addColorStop(1,sat(gold3));
+ X.fillStyle=dg;
+ X.beginPath();X.moveTo(px-RR,NY);
+ X.bezierCurveTo(px-RR,NY-RR*1.36,px+RR,NY-RR*1.36,px+RR,NY);
+ X.closePath();X.fill();edge(1.4);
+ /* الصاري والهلال — من المستوى ٠ */
+ const FY=NY-RR*1.02;
+ X.strokeStyle=sat(gold2);X.lineWidth=2.2*s;X.lineCap='round';
+ X.beginPath();X.moveTo(px,FY);X.lineTo(px,FY-13*s);X.stroke();
+ X.fillStyle=sat(gold2);X.beginPath();
+ X.arc(px,FY-18*s,4.6*s,0,7);X.arc(px+2.1*s,FY-19.2*s,4*s,0,7);
+ X.fill('evenodd');edge(1)};
 
 /* ── قبة نور: بناء الاستشفاع بعد فكّه عن المسجد ── */
 DRAW.nur=(x,y,n)=>{if(!n)return;
@@ -1294,12 +1305,12 @@ const SORTED = ["minaret","gate","mihrab","sundial","house","nur","rug","bridge"
    حجر كلسيّ فاتح ومداميك أغمق منه قليلًا — الأبلق في العمارة تباينٌ في
    المداميك لا رقعة شطرنج. والرخام للبحرة وحافّات القنوات.               */
 const PAL = {
-  light: { sand:"#D8D2C0", sandDot:"#C0B8A2",
-           stone:"#E4DAC3", band:"#D3C6A9", joint:"rgba(116,96,66,.16)",
-           edge:"rgba(116,96,66,.32)",
-           marble:"#F2ECDD", water:"#9DD9F2", waterD:"#5FAEC9",
-           curb:"#DDD1B2", curbSh:"rgba(84,68,44,.22)",
-           bedIn:"#7DBA8A", bedTx:"rgba(52,104,66,.07)", gold:"#B99442" },
+  light: { sand:"#CFC6A8", sandDot:"#B3A98A",
+           stone:"#F0E4C4", band:"#DCC79E", joint:"rgba(116,90,50,.22)",
+           edge:"rgba(96,74,42,.42)",
+           marble:"#FBF5E4", water:"#5FD0F5", waterD:"#2E96D4",
+           curb:"#E8D9AE", curbSh:"rgba(78,60,34,.28)",
+           bedIn:"#5FC45E", bedTx:"rgba(28,96,48,.10)", gold:"#E8B22C" },
   dark:  { sand:"#0A1815", sandDot:"#1A2E28",
            stone:"#42433C", band:"#383931", joint:"rgba(0,0,0,.26)",
            edge:"rgba(0,0,0,.42)",
@@ -1453,8 +1464,8 @@ function ground() {
 
   /* داخل الحدود — أرض الجنّة */
   const g = X.createRadialGradient(535, 420, 60, 535, 420, IN.w * .72);
-  if (dk) { g.addColorStop(0, "#235A4C"); g.addColorStop(.55, "#1A473E"); g.addColorStop(1, "#102A24"); }
-  else    { g.addColorStop(0, "#A6D9AC"); g.addColorStop(.55, "#89C494"); g.addColorStop(1, "#6AA377"); }
+  if (dk) { g.addColorStop(0, "#1E6E4C"); g.addColorStop(.55, "#14543C"); g.addColorStop(1, "#0B3226"); }
+  else    { g.addColorStop(0, "#8FE07F"); g.addColorStop(.55, "#66C95E"); g.addColorStop(1, "#3E9E46"); }
   X.fillStyle = g; X.fillRect(IN.x, IN.y, IN.w, IN.h);
 
   /* ثلاث طبقات من التبقّع بمقاييس مختلفة — العشب المسطّح هو ما يجعل
@@ -2829,7 +2840,7 @@ const BoltIcon = ({ white }) => (
 /* لوحة ألوان الأقسام — الستة الأولى هي ألوان الهوية */
 const SEC_PALETTE = [...new Set([...Object.values(SEC_COLOR),
   "#2F7D74", "#C2544D", "#4F8A3D", "#8E6BB0", "#B0713C", "#41708F",
-  "#3FBBA4", "#5FC74A", "#E8B62C", "#F0873C", "#E8566E", "#8E5FE0", "#4E7FE0", "#D9A441"])];
+  "#00D6A6", "#4BE04B", "#FFC414", "#FF7A18", "#FF3D68", "#A03CFF", "#1E90FF", "#FFD426"])];
 
 /* أسماء الأبنية بالعربية — مأخوذة من الأصل، لئلا يظهر مفتاح لاتيني للمستخدم */
 const BUILD_AR = {};
