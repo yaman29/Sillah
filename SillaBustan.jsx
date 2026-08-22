@@ -1,12 +1,12 @@
 "use client";
 
 /* ════════════════════════════════════════════════════════════════════════════
-   SillaParadise.jsx — «جنّة صِلة» · برنامج أسوة
+   SillaBustan.jsx — «بستان صِلة» · برنامج أسوة
    ─────────────────────────────────────────────────────────────────────────────
    مرجع تصميم وسلوك. اقرأ CLAUDE.md أولًا — فيه المواصفات الكاملة.
 
-   الفكرة: الطالب يسجّل سننه اليومية، وكل سنّة تبني شيئًا في جنّته.
-           الجنّة مساحة محدودة يتجوّل فيها وتنمو حتى تكتمل في ٣٠ يومًا.
+   الفكرة: الطالب يسجّل سننه اليومية، وكل سنّة تبني شيئًا في بستانه.
+           البستان مساحة محدودة يتجوّل فيها وتنمو حتى تكتمل في ٣٠ يومًا.
 
    البنية:
      • DEFAULT_SECS     — الأصل: ٢٦ سنّة في ٦ أقسام، هو ما يبدأ منه كل مستخدم
@@ -27,10 +27,10 @@ import React, { useState, useRef, useEffect, useMemo, useCallback,
 
 /* ════════ ثوابت ════════ */
 export const DAYS_TOTAL = 30;          // أيام الشهر — سقف كل بناء
-const W = 1080, H = 830;               // أبعاد أرض الجنّة
+const W = 1080, H = 830;               // أبعاد أرض البستان
 const PAD = 52;                        // شريط السور حول الأرض
 const IN = { x: PAD, y: PAD, w: W - PAD * 2, h: H - PAD * 2 };
-const ZOOM = 0.44;                     // تكبير ثابت — الجنّة مصغّرة دائمًا
+const ZOOM = 0.44;                     // تكبير ثابت — البستان مصغّر دائمًا
 
 /* ════════ الإسقاط الإيزومتري ════════
    الأرض تُدار ٤٥° وتُضغط رأسيًا للنصف، فتصير مربّعاتها معيّنات ويظهر العمق.
@@ -100,7 +100,7 @@ const IC = {
   fence:   '<path d="M4 3 2 5v15c0 .6.4 1 1 1h2c.6 0 1-.4 1-1V5Z"/><path d="M6 9h4"/><path d="M6 17h4"/><path d="m12 3-2 2v15c0 .6.4 1 1 1h2c.6 0 1-.4 1-1V5Z"/><path d="M14 9h4"/><path d="M14 17h4"/><path d="m20 3-2 2v15c0 .6.4 1 1 1h2c.6 0 1-.4 1-1V5Z"/>',
 
 /* ── مكتبة إضافية للاختيار من لوحة الإدارة ──
-   هذه أيقونات واجهة فقط: تغييرها لا يغيّر ما يُبنى في الجنّة. */
+   هذه أيقونات واجهة فقط: تغييرها لا يغيّر ما يُبنى في البستان. */
   mosque:  '<path d="M4 21h16"/><path d="M6 21v-8h12v8"/><path d="M6 13a6 6 0 0 1 12 0"/><path d="M12 7V5"/><path d="M20 21V9"/><path d="M20 9V6"/><circle cx="20" cy="4.5" r="1"/>',
   book:    '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
   star:    '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2-5.5-2.9-5.5 2.9 1-6.2L3 9.6l6.2-.9z"/>',
@@ -128,21 +128,21 @@ export const ICON_NAMES = Object.keys(IC);
 /* ════════ السنن الـ٢٦ ════════
    type: 'bool' نعم/لا · 'cycle' عدّاد ٠→max · 'time' دقائق
    g: جواهر كل خطوة (لا تُشترط الإتمام)
-   b: ما يبنيه في الجنّة · h: الحديث أو الفضل
+   b: ما يبنيه في البستان · h: الحديث أو الفضل
    q/qt: وسم السنن السريعة (الوقت والتلميح)                                  */
 
 const DEFAULT_SECS=[
  {id:'salah',t:'سنن الصلاة',items:[
   {k:'iqama',n:'إقامة الصلاة',i:'mihrab',b:'محراب',type:'cycle',max:5,g:2,
    h:'«الصلاة عماد الدين» — يرتفع محرابك مع كل صلاة تقيمها.'},
-  {k:'r12',n:'١٢ ركعة سنة',i:'house',b:'بيت في الجنة',type:'bool',g:10,
+  {k:'r12',n:'١٢ ركعة سنة',i:'house',b:'بيت',type:'bool',g:10,
    h:'«من صلى اثنتي عشرة ركعة في يوم وليلة بُني له بيت في الجنة» — مسلم.'},
   {k:'waqt',n:'الصلاة على وقتها',i:'sundial',b:'ساعة شمسية',type:'cycle',max:5,g:2,
    h:'سُئل ﷺ أيّ العمل أحبّ إلى الله؟ قال: «الصلاة على وقتها».'},
   {k:'mubah',n:'الصلاة ضمن الوقت المباح',i:'minaret',b:'مئذنة',type:'cycle',max:5,g:1,
    h:'المحافظة على أدائها في وقتها المشروع — ترتفع مئذنتك كلما حافظت.'},
   {k:'tawaj',n:'دعاء التوجه',i:'gate',b:'بوابة',type:'cycle',max:5,g:1,
-   h:'«وجّهت وجهي للذي فطر السماوات والأرض» — بابٌ تدخل منه إلى جنّتك.'},
+   h:'«وجّهت وجهي للذي فطر السماوات والأرض» — بابٌ تدخل منه إلى بستانك.'},
   {k:'muk',n:'المكوث',i:'rug',b:'سجادة',type:'bool',g:4,q:'٥ د',qt:'امكث بعد صلاة واحدة',
    h:'«الملائكة تصلي على أحدكم ما دام في مصلاه: اللهم اغفر له، اللهم ارحمه».'}]},
  {id:'dhikr',t:'الأذكار والاستشفاع',items:[
@@ -151,16 +151,16 @@ const DEFAULT_SECS=[
   {k:'dubur',n:'٣٣ دبر كل صلاة',i:'garden',b:'بستان',type:'cycle',max:5,g:2,
    h:'«معقّبات لا يخيب قائلهنّ» — يتّسع بستانك مع كل تسبيح.'},
   {k:'shafa',n:'استشفاع',i:'nur',b:'قبة نور',type:'bool',g:8,q:'١ د',qt:'عشر صلوات على النبي ﷺ',
-   h:'«من صلى عليّ صلاةً واحدة صلى الله عليه بها عشرًا» — تشعّ قبّة النور في جنّتك.'},
+   h:'«من صلى عليّ صلاةً واحدة صلى الله عليه بها عشرًا» — تشعّ قبّة النور في بستانك.'},
   {k:'basm',n:'البسملة',i:'pattern',b:'نقش',type:'bool',g:2,q:'ثوانٍ',qt:'قلها عند أي عمل تبدؤه',
-   h:'«كل أمر ذي بال لا يُبدأ فيه ببسم الله فهو أبتر» — نقشٌ يزيّن جنّتك.'},
+   h:'«كل أمر ذي بال لا يُبدأ فيه ببسم الله فهو أبتر» — نقشٌ يزيّن بستانك.'},
   {k:'tard',n:'طاردات الشيطان',i:'fort',b:'حصن',type:'bool',g:4,q:'٢ د',qt:'أذكار تحصّنك',
    h:'الأذكار حصنٌ من الشيطان — يعلو سور حصنك يومًا بعد يوم.'}]},
  {id:'tuhr',t:'سنن الطهارة',items:[
   {k:'wudu',n:'سنن الوضوء',i:'fountain',b:'نافورة',type:'cycle',max:5,g:2,
    h:'«من توضأ فأحسن الوضوء خرجت خطاياه من جسده حتى تخرج من تحت أظفاره».'},
   {k:'onwudu',n:'البقاء على وضوء',i:'stream',b:'جدول ماء',type:'bool',g:4,
-   h:'«لا يحافظ على الوضوء إلا مؤمن» — جدولٌ يجري في أرض جنّتك.'},
+   h:'«لا يحافظ على الوضوء إلا مؤمن» — جدولٌ يجري في أرض بستانك.'},
   {k:'siwak',n:'السواك',i:'arak',b:'شجرة أراك',type:'cycle',max:5,g:1,q:'١ د',qt:'سواك واحد يكفي لتبدأ',
    h:'«السواك مطهرة للفم مرضاة للرب» — تنمو شجرة أراكك.'}]},
  {id:'wasl',t:'الصلة والإحسان',items:[
@@ -172,7 +172,7 @@ const DEFAULT_SECS=[
    h:'«والله في عون العبد ما كان العبد في عون أخيه».'}]},
  {id:'akhlaq',t:'سنن الأخلاق',items:[
   {k:'ibt',n:'الابتسامة',i:'flower',b:'زهرة',type:'bool',g:2,q:'ثوانٍ',qt:'ابتسم في وجه من تلقاه',
-   h:'«تبسّمك في وجه أخيك صدقة» — تتفتّح زهرة في جنّتك.'},
+   h:'«تبسّمك في وجه أخيك صدقة» — تتفتّح زهرة في بستانك.'},
   {k:'salam',n:'السلام',i:'path',b:'ممر',type:'bool',g:2,q:'ثوانٍ',qt:'ألقِ السلام على من تمرّ به',
    h:'«أفشوا السلام بينكم تحابّوا» — يمتدّ ممرّك بين البيوت.'},
   {k:'shukr',n:'الشكر',i:'fruit',b:'شجرة مثمرة',type:'bool',g:2,q:'١ د',qt:'اشكر الله واشكر من أحسن إليك',
@@ -180,7 +180,7 @@ const DEFAULT_SECS=[
   {k:'lisan',n:'تجنب آفات اللسان',i:'spring',b:'ينبوع صافٍ',type:'bool',g:5,
    h:'«من صمت نجا» — يصفو ينبوعك بصمتك عمّا لا يعني.'},
   {k:'tariq',n:'آداب الطريق',i:'lamp',b:'مصباح',type:'bool',g:2,
-   h:'«إماطة الأذى عن الطريق صدقة» — يضيء مصباح في طريق جنّتك.'},
+   h:'«إماطة الأذى عن الطريق صدقة» — يضيء مصباح في طريق بستانك.'},
   {k:'jalis',n:'الشرب جالسًا',i:'well',b:'بئر',type:'bool',g:2,q:'ثوانٍ',qt:'اجلس عند شربك',
    h:'من هديه ﷺ في شرابه — يُحفر بئرٌ في أرضك.'}]},
  {id:'layl',t:'سنن الليل',items:[
@@ -189,7 +189,7 @@ const DEFAULT_SECS=[
   {k:'kursi',n:'آية الكرسي',i:'shieldL',b:'درع نور',type:'bool',g:5,q:'١ د',qt:'آية واحدة قبل نومك',
    h:'«لا يزال عليك من الله حافظ ولا يقربك شيطان حتى تصبح».'},
   {k:'himaya',n:'دعاء الحماية',i:'fence',b:'سياج نور',type:'bool',g:3,q:'١ د',qt:'دعاء المساء',
-   h:'«من قالها حين يمسي لم يضره شيء» — سياجٌ يحوط جنّتك.'}]}];
+   h:'«من قالها حين يمسي لم يضره شيء» — سياجٌ يحوط بستانك.'}]}];
 
 /* ════════ مخزن السنن الحيّ ════════
    السنن لم تعد ثابتة: <SunanEditor/> يعدّلها، والمخزن يخطر كل الشاشات فتتحدّث
@@ -352,16 +352,16 @@ function sat(hex) {
 /* ════════ المراتب ════════
    الأجر غيبٌ بعيد، والجواهر رقمٌ يكبر بلا أثر. فالمراتب تجعل للتقدّم
    اسمًا يُنادى به وأثرًا يُرى في الأرض كلّها — يبلغ الطالب عتبةً فتترقّى
-   جنّته وتتبدّل ألوانها. يضبطها صاحب المشروع من شاشة التحرير.        */
-/* ما تفتحه المراتب — كلٌّ منها شيءٌ يُرى في الجنّة، لا رقمٌ ولا لون.
+   بستانه وتتبدّل ألوانها. يضبطها صاحب المشروع من شاشة التحرير.        */
+/* ما تفتحه المراتب — كلٌّ منها شيءٌ يُرى في البستان، لا رقمٌ ولا لون.
    وهي إضافاتٌ على المشهد، لا تمسّ الأبنية الـ٢٦ ولا مواضعها (§٣). */
 export const PERKS = {
   jet:     { n:"نافورة البحرة",   ic:"fountain", d:"يتدفّق الماء من قلب الصحن." },
-  flag:    { n:"رايات الأسوار",   ic:"feather",  d:"راياتٌ ترفرف على سور جنّتك كلّه." },
+  flag:    { n:"رايات الأسوار",   ic:"feather",  d:"راياتٌ ترفرف على سور بستانك كلّه." },
   blossom: { n:"زهرٌ في الريح",   ic:"leaf",     d:"وريقاتٌ تتطاير في أرضك." },
-  birds:   { n:"طيورٌ تحلّق",     ic:"feather",  d:"أسرابٌ تعبر سماء جنّتك." },
+  birds:   { n:"طيورٌ تحلّق",     ic:"feather",  d:"أسرابٌ تعبر سماء بستانك." },
   lantern: { n:"فوانيس الممرّات", ic:"lamp",     d:"فوانيس تضيء دروبك." },
-  stars:   { n:"سماء النجوم",     ic:"star",     d:"نجومٌ تتلألأ فوق الجنّة." },
+  stars:   { n:"سماء النجوم",     ic:"star",     d:"نجومٌ تتلألأ فوق البستان." },
 };
 export const PERK_KEYS = Object.keys(PERKS);
 
@@ -371,12 +371,12 @@ export const LS_TIERS = "silla.tiers.v1";
 const DEFAULT_TIERS = [
   { id:"t1", n:"غَرْس",    g:0,    c:"#00D6A6", r:"",        d:"بدأتَ الغرس — أوّل أثرٍ في أرضك." },
   { id:"t2", n:"رَوْضة",   g:200,  c:"#4BE04B", r:"jet",     d:"اخضرّت أرضك، وتدفّقت بحرتها." },
-  { id:"t3", n:"بُستان",   g:500,  c:"#FFC414", r:"flag",    d:"عَلَت راياتُك على السور." },
+  { id:"t3", n:"مُثمِر",   g:500,  c:"#FFC414", r:"flag",    d:"أثمر غرسك، وعَلَت راياتك على السور." },
   { id:"t4", n:"ظِلال",    g:900,  c:"#FF7A18", r:"blossom", d:"امتدّت ظلالها، وتطاير زهرها." },
-  { id:"t5", n:"جَنّة",    g:1400, c:"#FF3D68", r:"birds",   d:"تمّت عمارتها، وعبرت سماءها الطير." },
-  { id:"t6", n:"نُور",     g:2000, c:"#A03CFF", r:"lantern", d:"أضاءت دروبها بالفوانيس." },
-  { id:"t7", n:"سَكينة",   g:2800, c:"#1E90FF", r:"stars",   d:"سكنت تحت سماءٍ من نجوم." },
-  { id:"t8", n:"فِرْدَوْس", g:4000, c:"#FFD426", r:"",        d:"بلغتَ أعلاها — الفردوس الأعلى." },
+  { id:"t5", n:"وارِف",    g:1400, c:"#FF3D68", r:"birds",   d:"وَرَفَ ظلّه، وعبرت سماءه الطير." },
+  { id:"t6", n:"نُور",     g:2000, c:"#A03CFF", r:"lantern", d:"أضاءت دروبه بالفوانيس." },
+  { id:"t7", n:"سَكينة",   g:2800, c:"#1E90FF", r:"stars",   d:"سكن تحت سماءٍ من نجوم." },
+  { id:"t8", n:"زاهِر",    g:4000, c:"#FFD426", r:"",        d:"بلغتَ أعلاه — بستانٌ زاهرٌ تامّ." },
 ];
 export let TIERS = DEFAULT_TIERS.map((t) => ({ ...t }));
 let tierVer = 0;
@@ -542,8 +542,8 @@ export const gLabel = (d) => `الموافق ${ar(d.getDate())} ${GM[d.getMonth(
 
 /* ════════ الحالة ════════
    LOG["2026-08-19"][sunnahKey] = value
-   البرنامج يستمرّ طوال السنة: كل شهر هجري جنّة مستقلّة تُبنى في ٣٠ يومًا،
-   والشهور السابقة تبقى أرشيفًا يُتصفَّح. اقلب MONTHLY إلى false لجنّة واحدة
+   البرنامج يستمرّ طوال السنة: كل شهر هجري بستانٌ مستقلّ يُبنى في ٣٠ يومًا،
+   والشهور السابقة تبقى أرشيفًا يُتصفَّح. اقلب MONTHLY إلى false لبستانٍ واحد
    تتراكم طوال السنة.                                                       */
 export const MONTHLY = true;
 
@@ -1223,7 +1223,7 @@ DRAW.shieldL=(x,y,n)=>{if(!n)return;const s=.6+Math.min(n,DCAP)/DCAP*.55;X.save(
  X.quadraticCurveTo(x,y+9*s,x-24*s,y-11*s);X.lineTo(x-24*s,y-30*s);X.closePath();X.fill();
  X.globalAlpha=.55;X.strokeStyle=DK()?'#A8E4DA':'#8FD3C8';X.lineWidth=2.2;X.stroke();X.restore()};
 
-/* سياج النور: يحيط بالجنّة داخل السور */
+/* سياج النور: يحيط بالبستان داخل السور */
 DRAW.fence=(x,y,n)=>{if(!n)return;const k=Math.min(n,DCAP);X.save();
  X.globalAlpha=.22+Math.min(k,30)/30*.18+Math.sin(ph*1.2)*.06;
  X.strokeStyle=DK()?'#8FD3C8':'#6BBFB2';X.lineWidth=2.4;X.lineCap='round';
@@ -1439,8 +1439,8 @@ function birka(cx, cy, r) {
   X.restore();
 }
 
-/* ════════ أرض الجنّة — صحن على هيئة البيت الدمشقي ════════
-   المحوران المتقاطعان أصلًا هما هيكل الچهارباغ: حديقة الجنّة القرآنية،
+/* ════════ أرض البستان — صحن على هيئة البيت الدمشقي ════════
+   المحوران المتقاطعان أصلًا هما هيكل الچهارباغ: الحديقة المقسومة أرباعًا،
    وهو نفسه تخطيط صحن الدار الدمشقية. فبُني عليهما:
      • ممرّان بحجر أبلق، وفي الشرقيّ-الغربيّ قناة ماء
      • بحرة مثمّنة عند التقاطع
@@ -1462,7 +1462,7 @@ function ground() {
   /* من هنا: كل ما يستلقي على الأرض يُسقَط إيزومتريًا */
   X.setTransform(IK, IK * IZ, -IK, IK * IZ, IOX, IOY);
 
-  /* داخل الحدود — أرض الجنّة */
+  /* داخل الحدود — أرض البستان */
   const g = X.createRadialGradient(535, 420, 60, 535, 420, IN.w * .72);
   if (dk) { g.addColorStop(0, "#1E6E4C"); g.addColorStop(.55, "#14543C"); g.addColorStop(1, "#0B3226"); }
   else    { g.addColorStop(0, "#8FE07F"); g.addColorStop(.55, "#66C95E"); g.addColorStop(1, "#3E9E46"); }
@@ -2111,7 +2111,7 @@ export function Village({ st, theme = "light" }) {
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <Logo />
           <div>
-            <div style={S.h1}>جنّة صِلة</div>
+            <div style={S.h1}>بستان صِلة</div>
             <div style={S.sub}>{preview ? "معاينة: كل السنن ٣٠ يومًا" : "تجوّل فيما عمّرته"}</div>
           </div>
         </div>
@@ -2170,7 +2170,7 @@ export function Village({ st, theme = "light" }) {
           onPreview={(i) => { SFX.rank(); setTierPv(i); setTrack(false); }} />
       )}
 
-      {/* شريط الشهر — الجنّة تتبدّل بتبدّله */}
+      {/* شريط الشهر — البستان يتبدّل بتبدّله */}
       <MonthBar start={start} setStart={setStart} sub={`${fmt(monthGems)} جوهرة هذا الشهر`} />
 
       <div style={{ ...S.stage, ...(full ? S.stageFull : {}) }} ref={stageRef}>
@@ -2226,7 +2226,7 @@ export function Village({ st, theme = "light" }) {
                 if (dm < nd) {
                   nd = dm;
                   best = { k: "__mosque", i: "dome", ic: "dome", c: TIERC,
-                           b: "المسجد", n: "أساس جنّتك", mosque: true, days: MLV + 1,
+                           b: "المسجد", n: "أساس بستانك", mosque: true, days: MLV + 1,
                            h: "قلبُ القرية. لا تبنيه سنّةٌ بعينها، بل يعلو بمرتبتك — كلّما ترقّيتَ في المسار زِيد فيه." };
                 }
               }
@@ -2243,7 +2243,7 @@ export function Village({ st, theme = "light" }) {
         {rankUp && (
           <Overlay onClose={() => setRankUp(null)} z={95}>
             <div style={{ textAlign: "center" }}>
-              <div style={S.lbl}>ترقّت جنّتك</div>
+              <div style={S.lbl}>ترقّى بستانك</div>
               <div style={{ ...S.rankBig, color: rankUp.c }}>{rankUp.n}</div>
               <div style={{ ...S.rankRing, borderColor: rankUp.c }} />
               <div style={S.dlgH}>{rankUp.d}</div>
@@ -2289,8 +2289,8 @@ export function Village({ st, theme = "light" }) {
 
       <button style={{ ...S.pvBig, ...(preview ? S.pvOn : {}) }} onClick={() => setPreview((p) => !p)}>
         <EyeIcon />
-        {preview ? "هذه جنّتك مكتملة ✦ اضغط للعودة لحالتك"
-                 : `شاهد جنّتك مكتملة — لو أتممتَ كل السنن ${ar(cap)} يومًا`}
+        {preview ? "هذا بستانك مكتملًا ✦ اضغط للعودة لحالتك"
+                 : `شاهد بستانك مكتملًا — لو أتممتَ كل السنن ${ar(cap)} يومًا`}
       </button>
 
       <div style={S.slid}>
@@ -2306,7 +2306,7 @@ export function Village({ st, theme = "light" }) {
           style={{ width: "100%", accentColor: "var(--sp-gold)" }} />
         <div style={S.slEnds}>
           <span>يوم ١</span>
-          <span>{isNow ? "اسحب لترى نموّ جنّتك يومًا بيوم" : "شهر مضى"}</span>
+          <span>{isNow ? "اسحب لترى نموّ بستانك يومًا بيوم" : "شهر مضى"}</span>
           <span>يوم {ar(cap)}</span>
         </div>
       </div>
@@ -2348,7 +2348,7 @@ export function Recorder({ st, onSave }) {
   const [quick, setQuick] = useState(false);
   const [ask, setAsk] = useState(null);        /* سنّة سريعة تنتظر تأكيدك */
   const { day, dayKey, setDayKey, start, setStart, days, isFuture,
-          hit, setTime, isDone, dayGems, monthGems, doneCount, dayScore } = st;
+          hit, setTime, isDone, dayGems, monthGems, dayScore } = st;
 
   const secIdx = Math.min(sec, Math.max(0, SUNAN.length - 1));
   const S0 = SUNAN[secIdx] || { id: "-", t: "", items: [] };
@@ -2427,23 +2427,6 @@ export function Recorder({ st, onSave }) {
 
       {/* الحلقة والجواهر */}
       <div style={S.topBar}>
-        <div style={S.ring}>
-          <svg width="62" height="62" style={{ transform: "rotate(-90deg)" }}>
-            <circle cx="31" cy="31" r="26" stroke="var(--sp-bg)" strokeWidth="7" fill="none" />
-            <circle cx="31" cy="31" r="26" stroke="url(#spg)" strokeWidth="7" fill="none"
-              strokeLinecap="round" strokeDasharray="164"
-              strokeDashoffset={164 * (1 - (TOTAL ? doneCount / TOTAL : 0))}
-              style={{ transition: "stroke-dashoffset .6s cubic-bezier(.2,.9,.3,1)" }} />
-            <defs><linearGradient id="spg" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stopColor="var(--sp-mint)" />
-              <stop offset="100%" stopColor="var(--sp-gold)" />
-            </linearGradient></defs>
-          </svg>
-          <div style={S.ringT}>
-            <div style={S.ringN}>{ar(doneCount)}</div>
-            <div style={S.ringL}>من {ar(TOTAL)}</div>
-          </div>
-        </div>
         <div style={{ flex: 1 }}>
           <div style={S.lbl}>جواهر اليوم</div>
           <div style={S.gemN}>{fmt(dayGems(dayKey))}</div>
@@ -2519,7 +2502,7 @@ export function Recorder({ st, onSave }) {
         </button>
       </div>
 
-      <button style={S.saveB} onClick={() => { SFX.save(); onSave(); }}>حفظ وبناء جنّتك</button>
+      <button style={S.saveB} onClick={() => { SFX.save(); onSave(); }}>حفظ وبناء بستانك</button>
 
       {/* نافذة الفضل */}
       {info && (
@@ -2534,7 +2517,7 @@ export function Recorder({ st, onSave }) {
             <div style={S.dlgH}>{info.h}</div>
             <div style={S.dlgB}>
               <div style={S.dlgBHalf}>
-                <div style={S.dlgBK}>يبني في جنّتك</div>
+                <div style={S.dlgBK}>يبني في بستانك</div>
                 <div style={S.dlgBV}>{info.b}</div>
               </div>
               <span style={S.dlgBSep} />
@@ -2688,7 +2671,7 @@ const SoundBtn = () => {
     </button>
   );
 };
-/* ════ مسار الجنّة ════
+/* ════ مسار البستان ════
    بطاقاتٌ تُمرَّر أفقيًا لا قائمة: المفتوحُ ملوّنٌ يلمع، والمقفلُ باهتٌ بقفله
    وما بقي له. وزرٌّ يعاين كلَّ مرتبةٍ في الأرض قبل بلوغها.               */
 function Track({ gems, onClose, onPreview, previewing }) {
@@ -2707,7 +2690,7 @@ function Track({ gems, onClose, onPreview, previewing }) {
     <Overlay onClose={onClose} wide z={92}>
       <div style={S.tkHead}>
         <div>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>مسار الجنّة</div>
+          <div style={{ fontSize: 16, fontWeight: 700 }}>مسار البستان</div>
           <div style={S.lbl}>كلّ مرتبةٍ تفتح شيئًا يُرى في أرضك</div>
         </div>
         <div style={S.tkGems}>{fmt(gems)} 💎</div>
@@ -2829,7 +2812,7 @@ const BoltIcon = ({ white }) => (
 /* ════════════════════════════════════════════════════════════════════
    <SunanEditor/> — تحرير السنن
    • كل تعديل يُطبَّق فورًا على المخزن الحيّ ويُحفظ في المتصفّح،
-     فتراه في «التعبئة» و«جنّة صِلة» في اللحظة نفسها.
+     فتراه في «التعبئة» و«بستان صِلة» في اللحظة نفسها.
    • الأقسام: أضِف · سمِّ · لوِّن · رتِّب · احذف
    • السنّة: اسحبها بإصبعك لتنقلها بين الأقسام، أو اضغطها لتحرير كل شيء
      فيها — الحديث، الجواهر، النوع، ما تبنيه، أيقونتها، وقسمها.
@@ -3100,14 +3083,14 @@ export function SunanEditor({ embedded = false }) {
       <div style={{ ...S.head, marginTop: 22 }}>
         <div>
           <div style={S.h1}>المراتب</div>
-          <div style={S.sub}>يبلغ الطالب العتبة فتترقّى جنّته ويتبدّل لونها</div>
+          <div style={S.sub}>يبلغ الطالب العتبة فيترقّى بستانه ويتبدّل لونه</div>
         </div>
         <button style={S.edBtn} onClick={addTier}>＋ مرتبة</button>
       </div>
 
       <div style={S.edTip}>
         الجواهر عددٌ يكبر بلا أثر. والمرتبة تجعل له اسمًا يُنادى به ولونًا
-        يصبغ حدّ الأرض — فيرى الطالب تقدّمه في جنّته لا في رقمٍ فقط.
+        يصبغ حدّ الأرض — فيرى الطالب تقدّمه في بستانه لا في رقمٍ فقط.
       </div>
 
       {TIERS.map((t, ti) => (
@@ -3127,7 +3110,7 @@ export function SunanEditor({ embedded = false }) {
           <div style={S.aLbl}>ما يُقال عند بلوغها</div>
           <textarea value={t.d} rows={2} style={S.aArea}
             onChange={(e) => patchTier(t.id, "d", e.target.value)} />
-          <div style={S.aLbl}>ما تفتحه — يظهر في الجنّة عند بلوغها</div>
+          <div style={S.aLbl}>ما تفتحه — يظهر في البستان عند بلوغها</div>
           <div style={S.edPerks}>
             <button onClick={() => patchTier(t.id, "r", "")}
               style={{ ...S.edPerk, ...(!t.r ? { borderColor: t.c, background: t.c + "1A" } : {}) }}>
@@ -3152,7 +3135,7 @@ export function SunanEditor({ embedded = false }) {
           </div>
           <div style={{ ...S.lbl, marginTop: 6 }}>الباهت مأخوذٌ لمرتبةٍ أخرى.</div>
 
-          <div style={S.aLbl}>لونها — يصبغ حدّ أرض الجنّة</div>
+          <div style={S.aLbl}>لونها — يصبغ حدّ أرض البستان</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {SEC_PALETTE.map((c) => (
               <button key={c} onClick={() => patchTier(t.id, "c", c)} aria-label={c}
@@ -3273,11 +3256,11 @@ export function SunanEditor({ embedded = false }) {
             ))}
           </div>
 
-          <div style={S.aLbl}>اسم ما يُبنى في الجنّة</div>
-          <input value={item.b} style={S.edInput} placeholder="بيت في الجنة"
+          <div style={S.aLbl}>اسم ما يُبنى في البستان</div>
+          <input value={item.b} style={S.edInput} placeholder="بيت"
             onChange={(e) => patch(item.k, "b", e.target.value)} />
 
-          <div style={S.aLbl}>البناء نفسه — ما يظهر ويكبر في أرض جنّتك</div>
+          <div style={S.aLbl}>البناء نفسه — ما يظهر ويكبر في أرض بستانك</div>
           <div style={S.aIcons}>
             {BUILDS.map((nm) => {
               const on = item.i === nm;
@@ -3349,7 +3332,7 @@ export function SunanEditor({ embedded = false }) {
       {/* ── التصدير ── */}
       {out && (
         <Overlay onClose={() => setOut(null)} wide>
-          <div style={{ fontSize: 15, fontWeight: 700 }}>الصق هذا في SillaParadise.jsx</div>
+          <div style={{ fontSize: 15, fontWeight: 700 }}>الصق هذا في SillaBustan.jsx</div>
           <div style={{ ...S.lbl, marginTop: 4 }}>
             استبدل به كتلة <span style={{ direction: "ltr", display: "inline-block" }}>const DEFAULT_SECS=[...]</span> كاملةً
           </div>
@@ -3375,9 +3358,9 @@ export function SillaAdmin({ theme = "light" }) {
 }
 
 /* ════════════════════════════════════════════════════════════════════
-   <SillaParadise/> — الغلاف: تبويبان (الجنّة · التعبئة)
+   <SillaBustan/> — الغلاف: التبويبات (البستان · التعبئة)
    ════════════════════════════════════════════════════════════════════ */
-export default function SillaParadise({ theme = "light", initialLog = {}, editable = true }) {
+export default function SillaBustan({ theme = "light", initialLog = {}, editable = true }) {
   useEffect(() => { hydrateSunan(); hydrateSound(); hydrateSkin(); hydrateTiers(); }, []);
   const st = useSillaState(initialLog);
   const [tab, setTab] = useState("village");
@@ -3391,7 +3374,7 @@ export default function SillaParadise({ theme = "light", initialLog = {}, editab
         <button style={{ ...S.tb, ...(tab === "village" ? S.tbOn : {}) }} onClick={() => setTab("village")}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" style={S.tbIc}>
             <path d="M3 12l9-9 9 9M5 10v10h14V10" /></svg>
-          جنّة صِلة
+          بستان صِلة
         </button>
         <button style={{ ...S.tb, ...(tab === "rec" ? S.tbOn : {}) }} onClick={() => setTab("rec")}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" style={S.tbIc}>
@@ -3631,11 +3614,6 @@ const S = {
   topBar: { display: "flex", alignItems: "center", gap: 13, background: "var(--sp-surf)",
             border: "1px solid var(--sp-line)", borderRadius: 17, padding: "13px 15px",
             marginBottom: 13, boxShadow: "var(--sp-sh)" },
-  ring: { position: "relative", width: 62, height: 62, flexShrink: 0 },
-  ringT: { position: "absolute", inset: 0, display: "flex", flexDirection: "column",
-           alignItems: "center", justifyContent: "center" },
-  ringN: { fontSize: 16, fontWeight: 700, color: "var(--sp-gold)", lineHeight: 1 },
-  ringL: { fontSize: 8, color: "var(--sp-mut)" },
   gemN: { fontSize: 23, fontWeight: 700, color: "var(--sp-gold)", lineHeight: 1 },
   /* سنن سريعة */
   quickB: { width: "100%", border: "1.5px solid var(--sp-mint)", background: "var(--sp-mintBg)",
