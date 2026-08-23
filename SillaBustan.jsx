@@ -1296,6 +1296,9 @@ export const SPOT={
  crescent:[962,98],
  shieldL:[110,111]};
 
+/* ما يستلقي على الأرض لا يصدّ اللاعب — يمشي عليه. وما يقف يصدّه. */
+const FLAT = { path:1, pattern:1, fence:1, rug:1, stream:1, fort:1 };
+
 /* ما يترنّح مع الريح — النبات القائم وحده، لا ما يغطّي الأرض */
 const SWAY = { palm:1, arak:1, fruit:1, flower:1, garden:1 };
 const BACK   = ["fort","fence","stream","crescent","shieldL","pattern","path"];
@@ -1925,7 +1928,7 @@ export function Village({ st, theme = "light" }) {
     return () => { document.body.style.overflow = prev; window.removeEventListener("keydown", esc); };
   }, [full]);
 
-  const P = useRef({ x: W / 2, y: H * .62, s: 2.4, f: 0, mv: 0 });
+  const P = useRef({ x: 300, y: 420, s: 2.4, f: 0, mv: 0 });   /* على الممرّ، خارج الأبنية */
   const cam = useRef({ x: W / 2, y: H * .55 });
   const joy = useRef({ x: 0, y: 0 });
   const keys = useRef({});
@@ -1939,6 +1942,7 @@ export function Village({ st, theme = "light" }) {
   const dust = useRef([]);         /* نُفَخ الغبار الحيّة */
   const lastBoom = useRef(0);
   const capRef = useRef(30);
+  const solidRef = useRef([]);     /* ما لا يُمشى فوقه */
 
   useEffect(() => { DKMODE = theme === "dark"; }, [theme]);
 
@@ -2019,8 +2023,24 @@ export function Village({ st, theme = "light" }) {
       if (P.current.mv) {
         vx /= m; vy /= m;
         const sp = P.current.s / ZOOM * .5;
-        P.current.x = Math.max(IN.x - 20, Math.min(IN.x + IN.w + 20, P.current.x + vx * sp));
-        P.current.y = Math.max(IN.y - 10, Math.min(IN.y + IN.h + 20, P.current.y + vy * sp));
+        const R = 8, SD = solidRef.current;
+        const hit = (x, y) => {
+          for (let i = 0; i < SD.length; i++) {
+            const q = SD[i];
+            if (x > q[0] - R && x < q[2] + R && y > q[1] - R && y < q[3] + R) return true;
+          }
+          return false;
+        };
+        const cx2 = Math.max(IN.x - 20, Math.min(IN.x + IN.w + 20, P.current.x + vx * sp));
+        const cy2 = Math.max(IN.y - 10, Math.min(IN.y + IN.h + 20, P.current.y + vy * sp));
+        if (hit(P.current.x, P.current.y)) {
+          /* وُجد داخل بناء (بناءٌ نشأ فوقه) — اتركه يخرج ولا تحبسه */
+          P.current.x = cx2; P.current.y = cy2;
+        } else {
+          /* كلُّ محورٍ على حدة، فينزلق على الجدار بدل أن يقف عنده */
+          if (!hit(cx2, P.current.y)) P.current.x = cx2;
+          if (!hit(P.current.x, cy2)) P.current.y = cy2;
+        }
         P.current.f++;
       }
       raf = requestAnimationFrame(move);
@@ -2072,6 +2092,19 @@ export function Village({ st, theme = "light" }) {
         if (grew && now - lastBoom.current > 220) { lastBoom.current = now; SFX.build(); }
       }
       prevN.current = snap;
+
+      /* بصمات ما يصدّ اللاعب — تُقرأ من EXTENT فتتبع نموّ المجموعات */
+      {
+        const sd = [];
+        Object.keys(SPOT).forEach((nm) => {
+          if (FLAT[nm]) return;
+          if (nm !== "dome" && !snap[nm]) return;      /* لم يُبنَ بعد */
+          const ex = EXTENT[nm];
+          if (ex) sd.push([ex.x0, ex.y0, ex.x1, ex.y1]);
+          else { const [a, b] = SPOT[nm]; sd.push([a - 15, b - 11, a + 15, b + 11]); }
+        });
+        solidRef.current = sd;
+      }
 
       /* قفزة النشأة: تمدّد ثم استقرار حول قاعدة البناء */
       const popAt = (nm, px, py) => {
