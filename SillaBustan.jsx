@@ -752,13 +752,13 @@ DRAW.fort=(x,y,n)=>{
  for(let i=0;i<k;i++){const[a,b,o]=WALL[i];seg.push({a,b,o,d:a+b})}
  seg.sort((p,q)=>p.d-q.d);
  /* حجر كلسيّ كحجر الصحن — لا رمادي يخالفه */
- /* حجرٌ رمليّ دافئ: الكِرَم شبه محايد، والتشبّع لا يُخرج لونًا من لا لون —
-    فكان السور يبتلع المشهد ببياضه. */
- const top=DK()?'#5E5334':'#E6C783',rgt=DK()?'#463D26':'#C4A159',lft=DK()?'#2E2818':'#96773E';
+ /* حجرٌ كلسيّ كِرَم — لا أمبريّ. الأمبر يصبغ المشهد كلّه بصفرةٍ ثقيلة،
+    والكِرَم الهادئ يترك الخضرةَ هي التي تحمل الحياة. */
+ const top=DK()?'#4E5A50':'#EDE4CE',rgt=DK()?'#3A4740':'#D3C6A9',lft=DK()?'#28332E':'#B0A386';
  seg.forEach(({a,b,o})=>{
   const sx=o==='h'?30:16,sy=o==='h'?16:30;
   isoBox(a,b,sx,sy,26,top,rgt,lft);                    /* بدن البرج */
-  isoBox(a,b,sx*1.12,sy*1.12,5,DK()?'#6E6140':'#F0DCA6',rgt,lft,26);  /* شرفة تعلوه */
+  isoBox(a,b,sx*1.12,sy*1.12,5,DK()?'#5C6A5E':'#F5EEDF',rgt,lft,26);  /* شرفة تعلوه */
  })};
 
 /* ── بيوت الرواتب: حيّ يصل ٣٠ بيتًا ── */
@@ -1248,7 +1248,7 @@ export const SPOT={
  house:[807,153],
  mihrab:[328,194],
  minaret:[146,218],
- dome:[535,506],
+ dome:[597,472],
  nur:[356,462],
  gate:[466,197],
  sundial:[607,198],
@@ -1283,7 +1283,7 @@ const SORTED = ["minaret","gate","mihrab","sundial","house","nur","rug","bridge"
    حجر كلسيّ فاتح ومداميك أغمق منه قليلًا — الأبلق في العمارة تباينٌ في
    المداميك لا رقعة شطرنج. والرخام للبحرة وحافّات القنوات.               */
 const PAL = {
-  light: { sand:"#CFC6A8", sandDot:"#B3A98A",
+  light: { sand:"#CFCCC0", sandDot:"#B4B1A4",
            stone:"#F0E4C4", band:"#DCC79E", joint:"rgba(116,90,50,.22)",
            edge:"rgba(96,74,42,.42)",
            marble:"#FBF5E4", water:"#5FD0F5", waterD:"#2E96D4",
@@ -1387,44 +1387,6 @@ function parterre(x, y, w, h) {
   X.strokeStyle = p.edge;   X.lineWidth = 1; X.strokeRect(x - 2.5, y - 2.5, w + 5, h + 5);
 }
 
-/* البحرة: مثمّنة برخام ونجمة ثمانية في قاعها — قلب الصحن */
-function birka(cx, cy, r) {
-  const p = pal();
-  const oct = (rad) => {
-    X.beginPath();
-    for (let i = 0; i < 8; i++) {
-      const a = Math.PI / 8 + i * Math.PI / 4;
-      const px = cx + Math.cos(a) * rad, py = cy + Math.sin(a) * rad * .84;
-      i ? X.lineTo(px, py) : X.moveTo(px, py);
-    }
-    X.closePath();
-  };
-  X.save();
-  X.fillStyle = "rgba(20,35,30,.16)"; oct(r + 9); X.fill();
-  X.fillStyle = p.marble;  oct(r + 6); X.fill();
-  X.strokeStyle = p.edge; X.lineWidth = 1.3; oct(r + 6); X.stroke();
-  /* نجمة ثمانية مطعّمة في حافّة الرخام */
-  X.globalAlpha = .3; X.strokeStyle = p.gold; X.lineWidth = 1.6;
-  star8(cx, cy, r + 2, 0); X.stroke(); X.globalAlpha = 1;
-  X.fillStyle = p.band; oct(r); X.fill();
-  const g = X.createRadialGradient(cx - r * .3, cy - r * .35, 3, cx, cy, r);
-  g.addColorStop(0, p.water); g.addColorStop(1, p.waterD);
-  X.fillStyle = g; oct(r - 4); X.fill();
-  X.globalAlpha = .16; X.fillStyle = p.marble;
-  star8(cx, cy, r * .46, 0); X.fill(); X.globalAlpha = 1;
-  X.fillStyle = "rgba(255,255,255,.24)";
-  X.beginPath(); X.ellipse(cx - r * .3, cy - r * .32, r * .24, r * .12, -.4, 0, 7); X.fill();
-  X.restore();
-}
-
-/* ════════ أرض البستان — صحن على هيئة البيت الدمشقي ════════
-   المحوران المتقاطعان أصلًا هما هيكل الچهارباغ: الحديقة المقسومة أرباعًا،
-   وهو نفسه تخطيط صحن الدار الدمشقية. فبُني عليهما:
-     • ممرّان بحجر أبلق، وفي الشرقيّ-الغربيّ قناة ماء
-     • بحرة مثمّنة عند التقاطع
-     • رواق مرصوف يطوف بالصحن من داخل السور
-     • أرباع مزروعة بحافّة حجرية
-   لا يمسّ هذا موضع أي بناء من الـ٢٦.                                    */
 function ground() {
   const dk = DK(), p = pal();
 
@@ -1542,8 +1504,7 @@ function ground() {
     X.restore();
   }
 
-  /* ── البحرة: نزلت جنوب المحور ── */
-  birka(535, 604, 32);
+
 
   /* ── الحدّ الذهبي المتقطّع — §٥: يبيّن المساحة كاملة من اليوم الأول ── */
   X.save(); X.setLineDash([9, 7]); X.lineWidth = 3.2;
@@ -1708,8 +1669,18 @@ function perkLanterns() {
 
 /* نافورة في البحرة: عمودٌ صاعد وأقواسٌ جانبية وقطراتٌ وحلقاتٌ تتّسع */
 function perkJet() {
-  const px = IX(535, 604), py = IY(535, 604);
+  const px = IX(762, 420), py = IY(762, 420);
   X.save();
+  /* حوضٌ رخاميّ على مجرى القناة — البحرة حُذفت، فللنافورة حوضُها */
+  const p2 = pal();
+  X.fillStyle = "rgba(20,35,30,.16)";
+  X.beginPath(); X.ellipse(px + 1, py + 3, 30, 30 * IZ * .62, 0, 0, 7); X.fill();
+  X.fillStyle = p2.marble;
+  X.beginPath(); X.ellipse(px, py, 28, 28 * IZ * .62, 0, 0, 7); X.fill(); edge(1.2);
+  const wg = X.createRadialGradient(px - 6, py - 4, 2, px, py, 22);
+  wg.addColorStop(0, p2.water); wg.addColorStop(1, p2.waterD);
+  X.fillStyle = wg;
+  X.beginPath(); X.ellipse(px, py, 21, 21 * IZ * .62, 0, 0, 7); X.fill();
   /* حلقات على سطح الماء */
   for (let r = 0; r < 4; r++) {
     const t = ((ph * .5 + r / 4) % 1);
@@ -1817,23 +1788,50 @@ function perkBlossom() {
   X.restore();
 }
 
-/* أسرابٌ تعبر السماء */
+/* أسرابٌ تعبر السماء: أعماقٌ ثلاثة، وهيئةُ سهم، وطائرٌ محلّق يبسط جناحيه
+   ولا يخفق — الاختلافُ هو ما يجعلها تبدو حيّة لا نسخًا مكرّرة. */
 function perkBirds() {
   X.save();
-  X.strokeStyle = DK() ? "rgba(226,238,236,.8)" : "rgba(52,70,64,.72)";
   X.lineCap = "round"; X.lineJoin = "round";
-  for (let f = 0; f < 4; f++) {
-    const base = ((ph * .09 + f * .27) % 1.25) * (W + 300) - 150;
-    for (let i = 0; i < 5; i++) {
-      const px = base - i * 26 + (i % 2) * 9;
-      const py = 76 + f * 54 + i * 9 + Math.sin(ph * 1.1 + i + f) * 5;
-      const w = 6 + (i % 2) * 1.6, fl = Math.sin(ph * 4.4 + i * .7) * 3.4;
-      X.lineWidth = 1.9;
-      X.beginPath();
-      X.moveTo(px - w, py + fl); X.quadraticCurveTo(px, py - 2.4, px + w, py + fl);
-      X.stroke();
+
+  /* طائرٌ واحد: جناحان منحنيان وجسمٌ يُظهر اتّجاه الطيران */
+  const bird = (x, y, w, flap, alpha) => {
+    const lift = flap * w * .6;
+    X.globalAlpha = alpha;
+    X.lineWidth = Math.max(1.1, w * .28);
+    X.strokeStyle = DK() ? "rgba(230,242,240,.95)" : "rgba(42,58,52,.88)";
+    X.beginPath();
+    X.moveTo(x - w, y + lift * .4);
+    X.quadraticCurveTo(x - w * .44, y - lift, x, y);
+    X.quadraticCurveTo(x + w * .44, y - lift, x + w, y + lift * .4);
+    X.stroke();
+    X.globalAlpha = alpha * .92;
+    X.fillStyle = DK() ? "rgba(230,242,240,.92)" : "rgba(42,58,52,.85)";
+    X.beginPath(); X.ellipse(x, y + w * .07, w * .24, w * .12, 0, 0, 7); X.fill();
+  };
+
+  /* البعيد أصغر وأخفت وأبطأ — العمق يُحسّ ولا يُرسم */
+  const flocks = [
+    { n: 7, w: 7.6, a: .95, sp: .105, y0: 96,  amp: 7, ph0: 0   },
+    { n: 5, w: 5.4, a: .60, sp: .078, y0: 158, amp: 5, ph0: 1.7 },
+    { n: 4, w: 3.8, a: .38, sp: .055, y0: 214, amp: 4, ph0: 3.1 },
+  ];
+  flocks.forEach((f, fi) => {
+    const base = ((ph * f.sp + f.ph0 * .3) % 1.35) * (W + 420) - 210;
+    for (let i = 0; i < f.n; i++) {
+      const rank = Math.ceil(i / 2), side = i % 2 ? 1 : -1;
+      const x = base - rank * f.w * 4.6;
+      const y = f.y0 + (i ? rank * f.w * 2.1 * side : 0)
+              + Math.sin(ph * 1.05 + i * .8 + fi) * f.amp;
+      bird(x, y, f.w, Math.sin(ph * (4.6 - fi * .8) + i * .9 + f.ph0), f.a);
     }
-  }
+  });
+
+  /* محلّقٌ وحده يدور في السماء بجناحين شبه ثابتين */
+  const t = (ph * .035) % 1;
+  bird(150 + t * (W - 300), 130 + Math.sin(t * Math.PI * 2) * 44,
+       11, Math.sin(ph * .5) * .26, .88);
+
   X.restore();
 }
 
@@ -2108,13 +2106,16 @@ export function Village({ st, theme = "light" }) {
         else DRAW[nm](px, py, t[it.k] || 0);
         if (pop) X.restore();
       });
-      /* بريقٌ يتحرّك على ماء البحرة — الأرض مخزّنة صورةً فلا حركة فيها */
-      const bg = IX(535, 604), bgy = IY(535, 604);
-      X.globalAlpha = .18 + Math.sin(ph * .9) * .08;
-      X.fillStyle = "#FFFFFF";
-      X.beginPath();
-      X.ellipse(bg - 8 + Math.sin(ph * .5) * 4, bgy - 3, 10, 10 * IZ * .7, -0.42, 0, 7);
-      X.fill(); X.globalAlpha = 1;
+      /* بريقٌ يتحرّك على ماء الحوض — الأرض مخزّنة صورةً فلا حركة فيها.
+         ولا حوضَ قبل فتح النافورة، فلا بريق قبلها */
+      if (PERKON.jet) {
+        const bg = IX(762, 420), bgy = IY(762, 420);
+        X.globalAlpha = .18 + Math.sin(ph * .9) * .08;
+        X.fillStyle = "#FFFFFF";
+        X.beginPath();
+        X.ellipse(bg - 8 + Math.sin(ph * .5) * 4, bgy - 3, 10, 10 * IZ * .7, -0.42, 0, 7);
+        X.fill(); X.globalAlpha = 1;
+      }
 
       const objs = [];
       SORTED.forEach((nm) => {
