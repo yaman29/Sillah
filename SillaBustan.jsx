@@ -3893,8 +3893,12 @@ export const LS_TOUR = "silla.tour.v1";
 const TOUR = [
   { tab: "village", at: null, ic: "heart",
     t: "أهلًا بك في بستان صِلة",
-    b: "هنا تُسجّل سننك اليومية. ولستَ تجمع نقاطًا: أنت تسعى إلى محبّة النبي ﷺ باتّباع هديه.",
-    q: "«من أحيا سنّتي فقد أحبّني، ومن أحبّني كان معي في الجنّة» — الترمذي." },
+    b: "هنا تُسجّل سننك اليومية. ولستَ تجمع نقاطًا: أنت تسعى إلى محبّة الله ورسوله ﷺ باتّباع هديه.",
+    q: "﴿قُلْ إِنْ كُنْتُمْ تُحِبُّونَ اللَّهَ فَاتَّبِعُونِي يُحْبِبْكُمُ اللَّهُ﴾ — آل عمران ٣١." },
+  { tab: "village", at: "tabs", ic: "tabs",
+    t: "شاشتان: تُعبّئ وترى",
+    b: "«التعبئة» تُسجّل فيها سننَ يومك، و«بستان صِلة» ترى فيها ما بنته تلك السنن. تتنقّل بينهما من هذا الشريط أسفل الشاشة.",
+    q: null },
   { tab: "rec", at: "grid", ic: "check",
     t: "اضغط السنّة فتُسجَّل",
     b: "كل مربّعٍ سنّة. اضغطه فيُعَدّ لك — ومنها ما يُعَدّ خمس مرّات كالصلوات. والجواهر تُمنح على كل خطوة لا عند الإتمام وحده.",
@@ -3920,6 +3924,7 @@ function TourIcon({ k }) {
     home:  '<path d="M3 12l9-9 9 9M5 10v10h14V10"/>',
     star:  '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2-5.5-2.9-5.5 2.9 1-6.2L3 9.6l6.2-.9z"/>',
     bolt:  '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
+    tabs:  '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 15h18"/><path d="M9 15v5"/><path d="M15 15v5"/>',
   };
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"
@@ -4023,7 +4028,7 @@ export default function SillaBustan({ theme = "light", initialLog = {}, editable
       {tab === "rec" && <Recorder st={st} onSave={() => setTab("village")}
         intent={intent} clearIntent={() => setIntent(null)} />}
       {tab === "edit" && <SunanEditor />}
-      <div style={S.tabs}>
+      <div style={S.tabs} data-tour="tabs">
         <button style={{ ...S.tb, ...(tab === "village" ? S.tbOn : {}) }} onClick={() => setTab("village")}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" style={S.tbIc}>
             <path d="M3 12l9-9 9 9M5 10v10h14V10" /></svg>
@@ -4263,7 +4268,10 @@ const S = {
               boxShadow: "0 0 0 9999px rgba(10,26,20,.66)",
               transition: "all .32s cubic-bezier(.2,.9,.3,1)" },
   tourCard: { position: "fixed", left: "50%", transform: "translateX(-50%)",
-              width: "min(430px, calc(100vw - 26px))", background: "var(--sp-surf)",
+              /* ⚠ `box-sizing` صريح: الحشوة تُضاف إلى العرض في الأصل،
+                 فبطاقةٌ عرضها ٣٧٨ تصير ٤١٠ ويضيع هامشُها. */
+              width: "min(384px, calc(100vw - 56px))", boxSizing: "border-box",
+              background: "var(--sp-surf)",
               borderRadius: 20, padding: "16px 16px 13px",
               boxShadow: "0 14px 40px rgba(10,26,20,.34)", textAlign: "right" },
   tourTop: { display: "flex", alignItems: "center", gap: 10, marginBottom: 8 },
