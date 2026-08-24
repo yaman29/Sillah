@@ -2104,7 +2104,7 @@ function drawPlayer(src, px, py) {
    ════════════════════════════════════════════════════════════════════ */
 const LS_RANK = "silla.rank.v1";
 
-export function Village({ st, theme = "light" }) {
+export function Village({ st, theme = "light", intent, clearIntent, onTour, showcase }) {
   useSunanVersion();
   useTiers();
   /* الأرض تُخطَّط من السنن نفسها: تُضاف سنّةٌ فتتّسع الأرض وتُبنى الصورة
@@ -2115,13 +2115,16 @@ export function Village({ st, theme = "light" }) {
   const stageRef = useRef(null);
   const padRef = useRef(null);
   const [viewDay, setViewDay] = useState(days.length);
-  const [preview, setPreview] = useState(false);
   const [full, setFull] = useState(false);       /* المشهد يملأ الشاشة */
   const fullRef = useRef(false);
   const [near, setNear] = useState(null);
 
   /* عند تبديل الشهر: اعرضه كاملًا */
   useEffect(() => { setViewDay(days.length); }, [days.length, start]);
+  /* ما وعدت به الجولة يُفتح هنا */
+  useEffect(() => {
+    if (intent === "rank") { setTrack(true); clearIntent && clearIntent(); }
+  }, [intent]);
   useEffect(() => {
     if (!full) return;
     const prev = document.body.style.overflow;
@@ -2178,8 +2181,10 @@ export function Village({ st, theme = "light" }) {
     }
   }, [rank.i]);
   /* المعاينة تُظهر الأرض عامرةً، وإلا لم يُرَ أثر المكافأة على أرضٍ خالية */
-  const builds = useMemo(() => tally(viewDay, preview || tierPv != null),
-                         [tally, viewDay, preview, tierPv]);
+  /* أثناء شرح «كل سنّةٍ تبني شيئًا» يُعرض البستان عامرًا — فالكلام عن
+     البناء أمام أرضٍ خالية لا يُقنع أحدًا. */
+  const builds = useMemo(() => tally(viewDay, showcase || tierPv != null),
+                         [tally, viewDay, showcase, tierPv]);
   const bRef = useRef(builds);
   useEffect(() => { bRef.current = builds; }, [builds]);
 
@@ -2489,8 +2494,6 @@ export function Village({ st, theme = "light" }) {
   };
 
   const totalBuilt = Object.values(builds).reduce((a, b) => a + Math.min(b, DAYS_TOTAL), 0);
-  const shown = days[Math.min(viewDay, days.length) - 1] || days[0];
-  const isNow = iso(monthStart(today())) === iso(start);
 
   return (
     <div style={S.wrap} dir="rtl">
@@ -2499,10 +2502,12 @@ export function Village({ st, theme = "light" }) {
           <Logo />
           <div>
             <div style={S.h1}>بستان صِلة</div>
-            <div style={S.sub}>{preview ? "معاينة: كل السنن ٣٠ يومًا" : "تجوّل فيما عمّرته"}</div>
+            <div style={S.sub}>تجوّل فيما عمّرته</div>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button style={S.tourAgain} aria-label="أعد جولة التعريف"
+            onClick={() => { SFX.open(); onTour && onTour(); }}><QMark size={15} /></button>
           <div style={S.stat}>
             <div style={S.statN}>{fmt(allGems)}</div>
             <div style={S.statL}>جوهرة</div>
@@ -2511,7 +2516,7 @@ export function Village({ st, theme = "light" }) {
       </div>
 
       {/* المرتبة وما بقي إلى التي بعدها */}
-      <div style={{ ...S.rankRow, borderColor: rank.cur.c }}>
+      <div style={{ ...S.rankRow, borderColor: rank.cur.c }} data-tour="rank">
         <div style={{ ...S.rankB, background: rank.cur.c }}>{rank.cur.n}</div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={S.rankBar}>
@@ -2559,7 +2564,7 @@ export function Village({ st, theme = "light" }) {
       {/* شريط الشهر — البستان يتبدّل بتبدّله */}
       <MonthBar start={start} setStart={setStart} sub={`${fmt(monthGems)} جوهرة هذا الشهر`} />
 
-      <div style={{ ...S.stage, ...(full ? S.stageFull : {}) }} ref={stageRef}>
+      <div style={{ ...S.stage, ...(full ? S.stageFull : {}) }} ref={stageRef} data-tour="stage">
         <button style={S.fullB} aria-label={full ? "إنهاء ملء الشاشة" : "ملء الشاشة"}
           onClick={() => { SFX.nav(); fullRef.current = !full; setFull(!full); }}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
@@ -2672,28 +2677,14 @@ export function Village({ st, theme = "light" }) {
         </div>
       </div>
 
-      <button style={{ ...S.pvBig, ...(preview ? S.pvOn : {}) }} onClick={() => setPreview((p) => !p)}>
-        <EyeIcon />
-        {preview ? "هذا بستانك مكتملًا ✦ اضغط للعودة لحالتك"
-                 : `شاهد بستانك مكتملًا — لو أتممتَ كل السنن ${ar(cap)} يومًا`}
-      </button>
-
-      <div style={S.slid}>
-        <div style={S.slTop}>
-          <div>
-            <div style={S.slDate}>{preview ? `اليوم ${ar(cap)} — مكتمل` : hLabel(shown)}</div>
-            <div style={S.slGreg}>{preview ? `كل السنن ${ar(cap)} يومًا` : gLabel(shown)}</div>
-          </div>
-          <div style={S.slBuilt}>{fmt(totalBuilt)} من {fmt(TOTAL * cap)}</div>
-        </div>
+      {/* شريطُ الأيام: سطرٌ واحد رفيع — كان بطاقةً بعنوانٍ وثلاثة أسطر
+          تأكل مئةَ بكسل تحت المشهد بلا أن تضيف معنى. */}
+      <div style={S.slRow} data-tour="slider">
+        <span style={S.slDay}>يوم {ar(Math.min(viewDay, days.length))}</span>
         <input type="range" min={1} max={days.length} value={Math.min(viewDay, days.length)}
           aria-label="يوم العرض" onChange={(e) => setViewDay(+e.target.value)}
-          style={{ width: "100%", accentColor: "var(--sp-gold)" }} />
-        <div style={S.slEnds}>
-          <span>يوم ١</span>
-          <span>{isNow ? "اسحب لترى نموّ بستانك يومًا بيوم" : "شهر مضى"}</span>
-          <span>يوم {ar(cap)}</span>
-        </div>
+          style={{ flex: 1, minWidth: 0, accentColor: "var(--sp-gold)" }} />
+        <span style={S.slBuilt}>{fmt(totalBuilt)} بناءً</span>
       </div>
     </div>
   );
@@ -2726,11 +2717,15 @@ function MonthBar({ start, setStart, sub }) {
    <Recorder/> — التعبئة: أقسام + شبكة ٣×٣ + سنن سريعة
    التجزئة (chunking): قسم واحد في الشاشة بدل ٢٦ بندًا متتالية.
    ════════════════════════════════════════════════════════════════════ */
-export function Recorder({ st, onSave }) {
+export function Recorder({ st, onSave, intent, clearIntent }) {
   useSunanVersion();
   const [sec, setSec] = useState(0);
   const [info, setInfo] = useState(null);
   const [quick, setQuick] = useState(false);
+  /* ما وعدت به الجولة يُفتح هنا */
+  useEffect(() => {
+    if (intent === "quick") { setQuick(true); clearIntent && clearIntent(); }
+  }, [intent]);
   const [ask, setAsk] = useState(null);        /* سنّة سريعة تنتظر تأكيدك */
   const { day, dayKey, setDayKey, start, setStart, days, isFuture,
           hit, setTime, isDone, dayGems, monthGems, dayScore } = st;
@@ -2823,7 +2818,7 @@ export function Recorder({ st, onSave }) {
       </div>
 
       {/* سنن سريعة */}
-      <button style={S.quickB} onClick={() => { SFX.open(); setQuick(true); }}>
+      <button style={S.quickB} data-tour="quick" onClick={() => { SFX.open(); setQuick(true); }}>
         <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <BoltIcon /> سنن سريعة
         </span>
@@ -2848,7 +2843,7 @@ export function Recorder({ st, onSave }) {
       </div>
 
       {/* شبكة ٣×٣ للقسم الحالي */}
-      <div style={S.grid}>
+      <div style={S.grid} data-tour="grid">
         {S0.items.length === 0 && (
           <div style={S.gridEmpty}>لا سنن في هذا القسم بعد — أضِفها من «تحرير السنن».</div>
         )}
@@ -3329,12 +3324,6 @@ function Track({ gems, onClose, onPreview, previewing }) {
   );
 }
 
-const EyeIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"
-    strokeLinecap="round" style={{ width: 17, height: 17, flexShrink: 0 }}>
-    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" />
-  </svg>
-);
 const BoltIcon = ({ white }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke={white ? "#fff" : "currentColor"} strokeWidth="2"
     strokeLinecap="round" strokeLinejoin="round" style={{ width: white ? 20 : 17, height: white ? 20 : 17 }}>
@@ -3893,15 +3882,146 @@ export function SillaAdmin({ theme = "light" }) {
 /* ════════════════════════════════════════════════════════════════════
    <SillaBustan/> — الغلاف: التبويبات (البستان · التعبئة)
    ════════════════════════════════════════════════════════════════════ */
+/* ════════ جولة التعريف ════════
+   أوّل فتحةٍ للبرنامج لا يعرف الطالب فيها ما هذا ولا لماذا. فالجولة
+   تُجيبه بالترتيب: **لماذا** نسعى إلى السنن، ثم **كيف** يُسجّلها، ثم
+   **ماذا يُبنى** بها، ثم **إلى أين** ترتقي، وتنتهي بـ**جرّب واحدة الآن**.
+   تُعرض مرّةً واحدة ويُحفظ ذلك في `silla.tour.v1`، ولها زرٌّ في الرأس
+   يعيدها لمن أرادها.                                                   */
+export const LS_TOUR = "silla.tour.v1";
+
+const TOUR = [
+  { tab: "village", at: null, ic: "heart",
+    t: "أهلًا بك في بستان صِلة",
+    b: "هنا تُسجّل سننك اليومية. ولستَ تجمع نقاطًا: أنت تسعى إلى محبّة النبي ﷺ باتّباع هديه.",
+    q: "«من أحيا سنّتي فقد أحبّني، ومن أحبّني كان معي في الجنّة» — الترمذي." },
+  { tab: "rec", at: "grid", ic: "check",
+    t: "اضغط السنّة فتُسجَّل",
+    b: "كل مربّعٍ سنّة. اضغطه فيُعَدّ لك — ومنها ما يُعَدّ خمس مرّات كالصلوات. والجواهر تُمنح على كل خطوة لا عند الإتمام وحده.",
+    q: null },
+  { tab: "village", at: "stage", ic: "home",
+    t: "وكل سنّةٍ تبني شيئًا",
+    b: "تصلّي فيرتفع محرابك، وتذكر الله فتُغرس نخلة، وتحصّن نفسك بالأذكار فيعلو سور بستانك. اسحب شريط الأيام تحت المشهد لترى بستانك ينمو يومًا بيوم.",
+    q: "«من قال سبحان الله العظيم وبحمده غُرست له نخلة في الجنّة»." },
+  { tab: "village", at: "rank", ic: "star",
+    t: "وترتقي في المسار",
+    b: "كلّما زادت جواهرك بلغتَ مرتبةً أعلى، وكل مرتبةٍ تفتح شيئًا جديدًا يُرى في بستانك: راياتٌ على السور، وتعريشاتُ ياسمين، وطيورٌ تعبر السماء، حتى وابل الشُّهب.",
+    q: null },
+  { tab: "rec", at: "quick", ic: "bolt",
+    t: "ولا تدع يومك يمضي",
+    b: "إن ضاق وقتك فاضغط «سنن سريعة»: أربع عشرة سنّةً تُنجَز في دقائق — ابتسامةٌ وسلامٌ وتسبيح. ابدأ بواحدةٍ الآن.",
+    q: null, cta: "جرّب سنّةً سريعة" },
+];
+
+function TourIcon({ k }) {
+  const P = {
+    heart: '<path d="M20.8 5.6a5.5 5.5 0 0 0-7.8 0L12 6.6l-1-1a5.5 5.5 0 1 0-7.8 7.8l8.8 8.8 8.8-8.8a5.5 5.5 0 0 0 0-7.8z"/>',
+    check: '<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
+    home:  '<path d="M3 12l9-9 9 9M5 10v10h14V10"/>',
+    star:  '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2-5.5-2.9-5.5 2.9 1-6.2L3 9.6l6.2-.9z"/>',
+    bolt:  '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
+  };
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"
+      strokeLinecap="round" strokeLinejoin="round" style={{ width: 22, height: 22 }}
+      dangerouslySetInnerHTML={{ __html: P[k] || P.star }} />
+  );
+}
+
+/* بقعةُ الضوء: ثقبٌ في العتمة حول العنصر المقصود — بظلٍّ خارجيّ هائل
+   بدل قصّ العنصر، فلا حاجة إلى قناعٍ ولا إلى نسخ العنصر. */
+function Tour({ tab, setTab, onDone, onCta, onStep }) {
+  const [i, setI] = useState(0);
+  const [box, setBox] = useState(null);
+  const step = TOUR[i];
+
+  /* الجولة تنقل بين التبويبات بنفسها، وتُخبر بموضعها */
+  useEffect(() => {
+    if (step && tab !== step.tab) setTab(step.tab);
+    onStep && onStep(step.at);
+  }, [i]);
+  useEffect(() => () => onStep && onStep(null), []);
+
+  useEffect(() => {
+    let raf = 0;
+    const find = () => {
+      if (!step.at) { setBox(null); return; }
+      const el = document.querySelector(`[data-tour="${step.at}"]`);
+      if (!el) { raf = requestAnimationFrame(find); return; }
+      const r = el.getBoundingClientRect();
+      if (!r.width) { raf = requestAnimationFrame(find); return; }
+      setBox({ x: r.left, y: r.top, w: r.width, h: r.height });
+    };
+    setBox(null); find();
+    const on = () => find();
+    window.addEventListener("resize", on); window.addEventListener("scroll", on, true);
+    return () => { cancelAnimationFrame(raf);
+      window.removeEventListener("resize", on); window.removeEventListener("scroll", on, true); };
+  }, [i, tab]);
+
+  const last = i === TOUR.length - 1;
+  const close = (fire) => {
+    try { window.localStorage.setItem(LS_TOUR, "1"); } catch (e) { /* تجاهل */ }
+    onDone(); if (fire && step.cta) onCta(step.at);
+  };
+  /* البطاقة في الجهة الأوسع من البقعة، ولا تتجاوز الشاشة أبدًا */
+  const vh = typeof window === "undefined" ? 800 : window.innerHeight;
+  const above = box ? box.y - 16 : 0, under = box ? vh - (box.y + box.h) - 16 : vh;
+  const below = !box || under >= above;
+  const room = Math.max(180, (below ? under : above) - 22);
+
+  return (
+    <div style={S.tourWrap} onClick={(e) => e.stopPropagation()}>
+      {box ? (
+        <div style={{ ...S.tourHole, left: box.x - 8, top: box.y - 8,
+                      width: box.w + 16, height: box.h + 16 }} />
+      ) : <div style={S.tourDim} />}
+      <div style={{ ...S.tourCard,
+                    ...(box ? (below ? { top: box.y + box.h + 16 } : { bottom: vh - box.y + 16 })
+                            : { top: "50%", transform: "translate(-50%,-50%)" }),
+                    ...(box ? { maxHeight: room, overflowY: "auto" } : {}) }}>
+        <div style={S.tourTop}>
+          <span style={S.tourIc}><TourIcon k={step.ic} /></span>
+          <div style={S.tourT}>{step.t}</div>
+        </div>
+        <div style={S.tourB}>{step.b}</div>
+        {step.q && <div style={S.tourQ}>{step.q}</div>}
+        <div style={S.tourDots}>
+          {TOUR.map((_, k) => (
+            <span key={k} style={{ ...S.tourDot, ...(k === i ? S.tourDotOn : {}) }} />
+          ))}
+        </div>
+        <div style={S.tourRow}>
+          <button style={S.tourSkip} onClick={() => close(false)}>تخطّي</button>
+          <button style={S.tourNext}
+            onClick={() => { SFX.nav(); last ? close(true) : setI(i + 1); }}>
+            {last ? (step.cta || "ابدأ") : "التالي"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function SillaBustan({ theme = "light", initialLog = {}, editable = true }) {
   useEffect(() => { hydrateSunan(); hydrateSound(); hydrateTiers(); }, []);
   const st = useSillaState(initialLog);
   const [tab, setTab] = useState("village");
+  /* الجولة تُعرض مرّةً واحدة — تُقرأ بعد التركيب لا قبله (§١٤) */
+  const [tour, setTour] = useState(false);
+  const [intent, setIntent] = useState(null);
+  const [tourAt, setTourAt] = useState(null);
+  useEffect(() => {
+    try { if (!window.localStorage.getItem(LS_TOUR)) setTour(true); } catch (e) { setTour(true); }
+  }, []);
   return (
     <div data-theme={theme} style={S.root} dir="rtl">
       <Styles />
-      {tab === "village" && <Village st={st} theme={theme} />}
-      {tab === "rec" && <Recorder st={st} onSave={() => setTab("village")} />}
+      {tab === "village" && <Village st={st} theme={theme}
+        intent={intent} clearIntent={() => setIntent(null)}
+        showcase={tourAt === "stage"} onTour={() => setTour(true)} />}
+      {tab === "rec" && <Recorder st={st} onSave={() => setTab("village")}
+        intent={intent} clearIntent={() => setIntent(null)} />}
       {tab === "edit" && <SunanEditor />}
       <div style={S.tabs}>
         <button style={{ ...S.tb, ...(tab === "village" ? S.tbOn : {}) }} onClick={() => setTab("village")}>
@@ -3923,6 +4043,8 @@ export default function SillaBustan({ theme = "light", initialLog = {}, editable
           </button>
         )}
       </div>
+      {tour && <Tour tab={tab} setTab={setTab} onStep={setTourAt}
+        onDone={() => setTour(false)} onCta={(k) => setIntent(k)} />}
     </div>
   );
 }
@@ -4133,6 +4255,41 @@ const S = {
   zn: { fontSize: 11.5, fontWeight: 700, color: "var(--sp-gold)", whiteSpace: "nowrap" },
   zh: { fontSize: 9.5, color: "var(--sp-mut)", whiteSpace: "nowrap",
         overflow: "hidden", textOverflow: "ellipsis" },
+  /* الجولة */
+  tourWrap: { position: "fixed", inset: 0, zIndex: 200 },
+  tourDim: { position: "fixed", inset: 0, background: "rgba(10,26,20,.66)" },
+  tourHole: { position: "fixed", borderRadius: 16, borderWidth: 2, borderStyle: "solid",
+              borderColor: "var(--sp-goldL)", pointerEvents: "none",
+              boxShadow: "0 0 0 9999px rgba(10,26,20,.66)",
+              transition: "all .32s cubic-bezier(.2,.9,.3,1)" },
+  tourCard: { position: "fixed", left: "50%", transform: "translateX(-50%)",
+              width: "min(430px, calc(100vw - 26px))", background: "var(--sp-surf)",
+              borderRadius: 20, padding: "16px 16px 13px",
+              boxShadow: "0 14px 40px rgba(10,26,20,.34)", textAlign: "right" },
+  tourTop: { display: "flex", alignItems: "center", gap: 10, marginBottom: 8 },
+  tourIc: { width: 38, height: 38, borderRadius: 13, flexShrink: 0, color: "#fff",
+            background: "linear-gradient(135deg,var(--sp-mint),var(--sp-prim))",
+            display: "flex", alignItems: "center", justifyContent: "center" },
+  tourT: { fontSize: 15.5, fontWeight: 700, lineHeight: 1.35 },
+  tourB: { fontSize: 12.5, lineHeight: 1.85, color: "var(--sp-txt)" },
+  tourQ: { fontSize: 11.5, lineHeight: 1.8, color: "var(--sp-gold)", marginTop: 8,
+           background: "var(--sp-aura)", borderRadius: 11, padding: "8px 11px" },
+  tourDots: { display: "flex", gap: 5, justifyContent: "center", margin: "13px 0 11px" },
+  tourDot: { width: 6, height: 6, borderRadius: "50%", background: "var(--sp-line)" },
+  tourDotOn: { background: "var(--sp-prim)", width: 17, borderRadius: 3 },
+  tourRow: { display: "flex", alignItems: "center", gap: 10 },
+  tourSkip: { border: "none", background: "none", color: "var(--sp-mut)",
+              fontSize: 12, padding: "9px 4px" },
+  tourNext: { flex: 1, border: "none", borderRadius: 13, padding: "11px 14px",
+              fontSize: 13, fontWeight: 700, color: "#fff",
+              background: "linear-gradient(135deg,var(--sp-mint),var(--sp-prim))" },
+  tourAgain: { border: "1px solid var(--sp-line)", background: "var(--sp-surf)",
+               color: "var(--sp-mut)", borderRadius: 11, width: 32, height: 32,
+               display: "flex", alignItems: "center", justifyContent: "center", padding: 0 },
+  slRow: { display: "flex", alignItems: "center", gap: 10, marginTop: 10,
+           background: "var(--sp-surf)", border: "1px solid var(--sp-line)",
+           borderRadius: 13, padding: "7px 12px", boxShadow: "var(--sp-sh)" },
+  slDay: { fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" },
   pvBig: { width: "100%", borderWidth: 1.5, borderStyle: "dashed", borderColor: "var(--sp-goldL)",
            background: "var(--sp-surf)",
            borderRadius: 15, padding: 13, fontSize: 12, fontWeight: 600, color: "var(--sp-gold)",
@@ -4144,7 +4301,7 @@ const S = {
   slTop: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 },
   slDate: { fontSize: 13, fontWeight: 700 },
   slGreg: { fontSize: 9.5, color: "var(--sp-mut)" },
-  slBuilt: { fontSize: 10.5, color: "var(--sp-gold)", fontWeight: 600 },
+  slBuilt: { fontSize: 10.5, color: "var(--sp-gold)", fontWeight: 700, whiteSpace: "nowrap" },
   slEnds: { display: "flex", justifyContent: "space-between", fontSize: 9, color: "var(--sp-mut)" },
   /* شريط الأيام */
   dayStrip: { display: "flex", gap: 7, overflowX: "auto", padding: "3px 2px 10px",
