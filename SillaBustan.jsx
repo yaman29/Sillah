@@ -292,34 +292,15 @@ function edge(w) {
   X.lineJoin = "round"; X.lineCap = "round"; X.stroke(); return true;
 }
 
-/* تشبّعٌ مركزيّ: بدل تغيير كل لون في السـتّة والعشرين رسّامًا، يمرّ اللون
-   من هنا فيشتدّ تشبّعه ويتباعد فاتحه عن داكنه — وهو جوهر ألوان المشهد. */
 /* ── من الست وعشرين رسّامًا إلى بوّابةٍ واحدة ──
-   كل لونٍ في المشهد يمرّ من هنا. ولذلك تُكتب الألوان **نهارًا فقط**،
-   ويُشتقّ الليل منها في هذه البوّابة: فلا لوحةُ ليلٍ ثانية تُنسى عند
-   تعديل النهار، ولا مشهدان يتباعدان.                                   */
-const SATC = { l: {}, d: {} };
+   كل لونٍ في المشهد يمرّ من هنا فيشتدّ تشبّعه ويتباعد فاتحه عن داكنه —
+   وهو جوهر ألوان المشهد. والمشهد **نهارٌ دائمًا**: جُرّب له ليلٌ فرُفض،
+   قاتمًا كئيبًا. فلا تُكتب ألوانٌ ثانية لثيمٍ غامق (§٨٫٢).            */
+const SATC = {};
 /* اللون الخارج من هنا يُختم بـ FF (شفافية تامّة لا تغيّر شيئًا في اللوحة)،
    فيُعرف عند دخوله ثانيةً فلا يُشبَّع مرّتين — والرسّام الواحد قد يمرّر
    لونه إلى isoBox أو lit فيمرّ من البوّابة مرّتين. */
 const DONE = (c) => c.length === 9;
-
-/* ما يضيء بذاته لا يخفت بالليل بل يشتدّ — الذهب والماء والقمر واللهب.
-   المفتاح لونُه النهاريّ، والقيمة كم يُرفع ضوؤه ليلًا.                  */
-const GLOW = {
-  "#B99442": 2.0, "#C9A54A": 1.9, "#D8B45E": 1.8, "#C9A96A": 1.8,
-  "#D9BE7E": 1.8, "#EBD9A0": 1.7, "#A78B52": 1.7, "#C2A24E": 1.9,
-  "#9DD9F2": 1.5, "#A8E4F8": 1.5, "#5FAEC9": 1.4, "#3E8FBE": 1.4,
-  "#F5EBD4": 1.5, "#F8EFDA": 1.4, "#FBF4E0": 1.4,
-  /* الماء والرخام يلمعان تحت القمر */
-  "#5FD0F5": 1.4, "#2E96D4": 1.3, "#FBF5E4": 1.1, "#E8D9AE": 1.05,
-  "#E8B22C": 1.9,
-  /* والأرض القاحلة خارج الحدّ تغرق أكثر، فيبقى البستان هو المضيء وسطها */
-  "#CFCCC0": .5, "#B4B1A4": .58,
-};
-
-/* لون ضوء القمر — يُمزج بكل لونٍ ليلًا فيوحّد كسوة المشهد */
-const MOON = [0x1C, 0x38, 0x52];
 
 function hsl3(hex) {
   const r = parseInt(hex.slice(1, 3), 16) / 255,
@@ -347,38 +328,18 @@ function hex3(h, sv, L) {
   return "#" + ch(h + 1 / 3) + ch(h) + ch(h - 1 / 3);
 }
 
-/* الليل ضوءٌ أقلّ لا لونٌ آخر: يُخفَض ضوءُ اللون ويُمال قليلًا إلى زُرقة
-   القمر ويبقى تشبّعه — فيبقى الحجر حجرًا والعشب عشبًا تحت ضوءٍ آخر.
-   وترتيب الإضاءة محفوظ: ما كان أفتح نهارًا يبقى أفتح ليلًا.            */
-function night(hex, k) {
-  const [h, sv, l] = hsl3(hex), kk = k || 1;
-  /* ١) الصفاء (chroma) لا التشبّع (S): لونٌ شبه أبيضَ تشبّعُه ١٠٠٪ صفاؤه
-        ضئيل، فلو حُفظ تشبّعه وحده لانفجر لونًا صارخًا عند خفض ضوئه. */
-  const C = (1 - Math.abs(2 * l - 1)) * sv;
-  const L2 = Math.max(.04, Math.min(.78, (.09 + l * .30) * kk));
-  const S2 = Math.min(1, (C * .88) / Math.max(.001, 1 - Math.abs(2 * L2 - 1)));
-  /* ٢) والصبغة لا تُدار: إدارتها نحو الزرقة تُحيل الكِرَم إلى زيتونيّ.
-        بل يُمزج ضوء القمر بالنتيجة، فتبرد كسوةُ المشهد كلّه معًا.     */
-  const out = hex3(h, S2, L2), mix = kk > 1.2 ? .06 : .30;
-  const ch = (i) => Math.round(parseInt(out.slice(1 + i * 2, 3 + i * 2), 16) * (1 - mix)
-                             + MOON[i] * mix).toString(16).padStart(2, "0");
-  return "#" + ch(0) + ch(1) + ch(2);
-}
-
 /* تشبّعٌ مركزيّ: اللون يشتدّ تشبّعه ويتباعد فاتحه عن داكنه — وهو جوهر
    ألوان المشهد. ثم يمرّ على الليل إن كان الثيم غامقًا.                  */
 function sat(hex) {
   if (typeof hex !== "string" || hex[0] !== "#" || hex.length < 7) return hex;
   if (DONE(hex)) return hex;
-  const dk = DK() ? 1 : 0, memo = SATC[dk ? "d" : "l"][hex];
+  const memo = SATC[hex];
   if (memo) return memo;
   const [h, sv0, l] = hsl3(hex);
   const sv = Math.min(1, sv0 * 2.35 + .16);
   /* ودفعُ الفاتح إلى الفتوح والداكن إلى العمق — التباين هو ما يُحيي المشهد */
   const L = Math.min(.95, Math.max(.06, l + (l > .55 ? .09 : l < .34 ? -.10 : 0)));
-  let out = hex3(h, sv, L);
-  if (dk) out = night(out, GLOW[hex.toUpperCase()] || GLOW[hex] || 1);
-  return (SATC[dk ? "d" : "l"][hex] = out + "FF");
+  return (SATC[hex] = hex3(h, sv, L) + "FF");
 }
 
 /* ════════ المراتب ════════
@@ -390,7 +351,7 @@ function sat(hex) {
 export const PERKS = {
   flag:    { n:"رايات الأسوار",   ic:"feather",  d:"راياتٌ ترفرف على سور بستانك كلّه." },
   blossom: { n:"زهرٌ في الريح",   ic:"leaf",     d:"وريقاتٌ تتطاير في أرضك." },
-  torch:   { n:"مشاعل الصحن",     ic:"sparkle",  d:"نارٌ تتراقص على أعمدة صحنك." },
+  arbor:   { n:"تعريشات الياسمين", ic:"leaf",    d:"أقواسٌ يتسلّقها الياسمين تُظلّل ممرّاتك." },
   birds:   { n:"طيورٌ تحلّق",     ic:"feather",  d:"أسرابٌ تعبر سماء بستانك." },
   lantern: { n:"فوانيس الممرّات", ic:"lamp",     d:"فوانيس تضيء دروبك." },
   stars:   { n:"سماء النجوم",     ic:"star",     d:"نجومٌ تتلألأ فوق البستان." },
@@ -405,7 +366,7 @@ const DEFAULT_TIERS = [
   { id:"t1", n:"غَرْس",    g:0,    c:"#00D6A6", r:"",        d:"بدأتَ الغرس — أوّل أثرٍ في أرضك." },
   { id:"t2", n:"رَوْضة",   g:200,  c:"#4BE04B", r:"flag",    d:"اخضرّت أرضك، وعَلَت راياتك على سورها." },
   { id:"t3", n:"مُثمِر",   g:500,  c:"#FFC414", r:"blossom", d:"أثمر غرسك، وتطاير زهره في الريح." },
-  { id:"t4", n:"ظِلال",    g:900,  c:"#FF7A18", r:"torch",   d:"امتدّت ظلالها، واتّقدت مشاعل صحنها." },
+  { id:"t4", n:"ظِلال",    g:900,  c:"#FF7A18", r:"arbor",   d:"امتدّت ظلالها، وتسلّق الياسمينُ تعريشاتها." },
   { id:"t5", n:"وارِف",    g:1400, c:"#FF3D68", r:"birds",   d:"وَرَفَ ظلّه، وعبرت سماءه الطير." },
   { id:"t6", n:"نُور",     g:2000, c:"#A03CFF", r:"lantern", d:"أضاءت دروبه بالفوانيس." },
   { id:"t7", n:"سَكينة",   g:2800, c:"#1E90FF", r:"stars",   d:"سكن تحت سماءٍ من نجوم." },
@@ -663,8 +624,8 @@ export function useSillaState(initialLog = {}) {
    ════════════════════════════════════════════════════════════════════ */
 let X = null;      // سياق الرسم — يُضبط داخل <Village/>
 let ph = 0;        // طور الحركة (الماء، التوهّج)
-let DKMODE = false;
-const DK = () => DKMODE;
+/* ⚠ لا ثيمَ غامقًا للمشهد: جُرّب ليلٌ للبستان فرُفض — قاتمًا كئيبًا.
+   المشهد نهارٌ دائمًا مهما كان ثيم الموقع (§٨٫٢). */
 
 /* الظلّ يستلقي على الأرض المائلة، فيُضغط رأسيًا ويميل كما تميل الأرض */
 function shadow(x, y, w, h, op) {
@@ -700,7 +661,24 @@ function puff(x, y, e) {
 }
 /* صندوق إيزومتري: قاعدته مربّع في فضاء الأرض، وله سطح ووجهان مضاءان
    إضاءةً مختلفة — وهذا ما يعطي الحجم. (wx,wy) مركز القاعدة في فضاء الأرض. */
+/* ── بصمةُ البناء على الأرض ──
+   الاصطدام يحتاج مستطيلًا في **فضاء الأرض** لكل بناء. وجدولٌ يدويّ يتخلّف
+   عن الرسّامين كلّما نَمَوا، فتُجمع البصمة وقت الرسم: كل صندوقٍ إيزومتريّ
+   يضمّ قاعدته إلى بصمة من يرسمه، فتتبع البصمةُ البناءَ بلا جدول.       */
+let CLAIM = null, CLAIMED = false;
+function claimStart(nm) { CLAIM = nm; CLAIMED = false; }
+function claim(wx, wy, sx, sy) {
+  if (!CLAIM) return;
+  const x0 = wx - sx, x1 = wx + sx, y0 = wy - sy, y1 = wy + sy, e = EXTENT[CLAIM];
+  if (!CLAIMED || !e) { EXTENT[CLAIM] = { x0, x1, y0, y1 }; CLAIMED = true; }
+  else {
+    if (x0 < e.x0) e.x0 = x0; if (x1 > e.x1) e.x1 = x1;
+    if (y0 < e.y0) e.y0 = y0; if (y1 > e.y1) e.y1 = y1;
+  }
+}
+
 function isoBox(wx, wy, sx, sy, h, cTop, cR, cL, lift) {
+  claim(wx, wy, sx, sy);
   const L = lift || 0;
   const N = [IX(wx - sx, wy - sy), IY(wx - sx, wy - sy) - L];
   const E = [IX(wx + sx, wy - sy), IY(wx + sx, wy - sy) - L];
@@ -947,7 +925,6 @@ DRAW.dome=(x,y,lv)=>{
  const [cx,cy]=SPOT.dome;
  /* أكبر ما في الأرض — هو قلبها، فلا يصحّ أن تبتلعه البيوت */
  const SX=(44+L*3.6)*s,SY=(29+L*2.4)*s;
- EXTENT.dome={x0:cx-SX,x1:cx+SX,y0:cy-SY,y1:cy+SY};
  const px=IX(cx,cy),py=IY(cx,cy);
  const PH=8*s,HH=(30+L*3.1)*s,HW=SX*.78,HD=SY*.76;
  const gold1=L>=4?'#FFF0BE':'#F6E7C2', gold2=L>=4?'#F3C93F':'#D8C38A', gold3=L>=4?'#B07E14':'#9E8C5A';
@@ -1329,8 +1306,18 @@ export const SPOT={
  crescent:[962,98],
  shieldL:[110,111]};
 
-/* ما يستلقي على الأرض لا يصدّ اللاعب — يمشي عليه. وما يقف يصدّه. */
-const FLAT = { path:1, pattern:1, fence:1, rug:1, stream:1, fort:1 };
+/* ما يستلقي على الأرض لا يصدّ اللاعب — يمشي عليه. وما يقف يصدّه.
+   والجسر منها: هو معبرٌ فوق النهر، فمن حقّه أن يُعبر. */
+const FLAT = { path:1, pattern:1, fence:1, rug:1, stream:1, bridge:1 };
+
+/* أبنيةٌ لا تُرسم بصناديق إيزومترية فلا بصمةَ تُجمع لها من `claim`.
+   ونصفُ قطرها في فضاء الأرض يُشتقّ من ظلّها: ظلٌّ نصف عرضه w على
+   الشاشة يقابل (سخ+سص)×IK، فالمتماثلُ نصفُ قطره ≈ w ÷ (٢×IK).      */
+const FOOT = { minaret:9, sundial:12, spring:22, well:16, crescent:12, shieldL:20 };
+
+/* موضع اللاعب وبصماتُ ما يصدّه — منفذُ اختبارٍ يقرأ منه الفحص الآليّ
+   أن اللاعب لم يدخل بناءً قطّ. لا تقرأ منه الواجهة شيئًا. */
+export const PSTATE = { x: 0, y: 0, solids: [] };
 
 /* ما يترنّح مع الريح — النبات القائم وحده، لا ما يغطّي الأرض */
 const SWAY = { palm:1, arak:1, fruit:1, flower:1, garden:1 };
@@ -1349,20 +1336,12 @@ const PAL = {
   curb:"#E8D9AE", curbSh:"rgba(78,60,34,.28)",
   bedIn:"#5FC45E", bedTx:"rgba(28,96,48,.10)", gold:"#E8B22C",
 };
-/* ما لا لونَ له — الفواصل والظلال — يزداد عتمةً بالليل ولا يُشتقّ */
-const PAL_DK = { joint:"rgba(0,0,0,.30)", edge:"rgba(0,0,0,.46)",
-                 curbSh:"rgba(0,0,0,.38)", bedTx:"rgba(0,0,0,.14)" };
 const PALC = { k: null, v: null };
 const pal = () => {
-  const key = DK() ? "d" : "l";
-  if (PALC.k === key) return PALC.v;
-  const dk = key === "d", out = {};
-  Object.keys(PAL).forEach((n) => {
-    const v = PAL[n];
-    out[n] = dk && PAL_DK[n] ? PAL_DK[n] : sat(v);
-  });
-  PALC.k = key; PALC.v = out;
-  return out;
+  if (PALC.v) return PALC.v;
+  const out = {};
+  Object.keys(PAL).forEach((n) => (out[n] = sat(PAL[n])));
+  return (PALC.v = out);
 };
 
 /* نجمة ثمانية = مربّعان متراكبان بزاوية ٤٥° — «رُبع الحزب» */
@@ -1446,7 +1425,7 @@ function parterre(x, y, w, h) {
 }
 
 function ground() {
-  const dk = DK(), p = pal();
+  const p = pal();
 
   /* خارج الحدود — أرض قاحلة تملأ اللوحة، فتُرسم قبل التحويل */
   X.setTransform(1, 0, 0, 1, 0, 0);
@@ -1462,8 +1441,7 @@ function ground() {
 
   /* داخل الحدود — أرض البستان */
   const g = X.createRadialGradient(535, 420, 60, 535, 420, IN.w * .72);
-  if (dk) { g.addColorStop(0, "#1E6E4C"); g.addColorStop(.55, "#14543C"); g.addColorStop(1, "#0B3226"); }
-  else    { g.addColorStop(0, "#8FE07F"); g.addColorStop(.55, "#66C95E"); g.addColorStop(1, "#3E9E46"); }
+  g.addColorStop(0, "#8FE07F"); g.addColorStop(.55, "#66C95E"); g.addColorStop(1, "#3E9E46");
   X.fillStyle = g; X.fillRect(IN.x, IN.y, IN.w, IN.h);
 
   /* ثلاث طبقات من التبقّع بمقاييس مختلفة — العشب المسطّح هو ما يجعل
@@ -1473,9 +1451,8 @@ function ground() {
     for (let i = 0; i < cnt; i++) {
       const a = IN.x + rnd(i + L * 7, IN.w), b = IN.y + rnd(i * 3 + L * 13, IN.h);
       X.globalAlpha = al;
-      X.fillStyle = (i + L) % 3 === 0 ? (dk ? "#2E6B58" : "#C2E9C6")
-                  : (i + L) % 3 === 1 ? (dk ? "#0E2A22" : "#54925F")
-                                      : (dk ? "#1E5244" : "#8FCB94");
+      X.fillStyle = (i + L) % 3 === 0 ? "#C2E9C6"
+                  : (i + L) % 3 === 1 ? "#54925F" : "#8FCB94";
       X.beginPath();
       X.ellipse(a, b, sz * (.5 + rnd(i * 5, .9)), sz * .5 * (.5 + rnd(i * 7, .8)),
                 rnd(i, 3), 0, 7);
@@ -1487,7 +1464,7 @@ function ground() {
   /* بقعُ ترابٍ عارية — تكسر رتابة الأخضر */
   for (let i = 0; i < 11; i++) {
     const a = IN.x + rnd(i + 91, IN.w), b = IN.y + rnd(i * 3 + 41, IN.h);
-    X.globalAlpha = .24; X.fillStyle = dk ? "#3A3020" : "#C8B893";
+    X.globalAlpha = .24; X.fillStyle = "#C8B893";
     X.beginPath();
     X.ellipse(a, b, 30 + rnd(i, 36), (30 + rnd(i, 36)) * .5, rnd(i, 3), 0, 7); X.fill();
   }
@@ -1496,7 +1473,7 @@ function ground() {
   /* نتفُ عشبٍ قائمة — أدقّ تفصيل، وأكثره أثرًا في كثافة المشهد */
   for (let i = 0; i < 150; i++) {
     const a = IN.x + rnd(i + 3, IN.w), b = IN.y + rnd(i * 7 + 5, IN.h);
-    X.strokeStyle = dk ? "rgba(86,168,132,.52)" : "rgba(56,124,74,.46)";
+    X.strokeStyle = "rgba(56,124,74,.46)";
     X.lineWidth = 2.6; X.lineCap = "round";
     X.beginPath();
     for (let f = -1; f <= 1; f++) {
@@ -1512,9 +1489,9 @@ function ground() {
     const r = 4.4 + rnd(i, 5);
     X.fillStyle = "rgba(20,35,30,.16)";
     X.beginPath(); X.ellipse(a + 1, b + 1.5, r * 1.1, r * .6, 0, 0, 7); X.fill();
-    X.fillStyle = dk ? "#4A5A52" : "#B9B49E";
+    X.fillStyle = "#B9B49E";
     X.beginPath(); X.ellipse(a, b, r, r * .7, rnd(i, 3), 0, 7); X.fill();
-    X.fillStyle = dk ? "#5E6E66" : "#D2CCB4";
+    X.fillStyle = "#D2CCB4";
     X.beginPath(); X.ellipse(a - r * .25, b - r * .22, r * .5, r * .3, 0, 0, 7); X.fill();
   }
 
@@ -1589,15 +1566,15 @@ function ground() {
       X.fillStyle = "rgba(12,32,24,.22)";
       X.beginPath(); X.ellipse(px + 1, py + 2, r * 1.1, r * .55, 0, 0, 7); X.fill();
       const cg = X.createLinearGradient(px - r, py - r, px + r * .6, py + r * .7);
-      cg.addColorStop(0, sat(dk ? "#3E9E6E" : "#6FCB86"));
-      cg.addColorStop(1, sat(dk ? "#17513A" : "#2E7A4A"));
+      cg.addColorStop(0, sat("#6FCB86"));
+      cg.addColorStop(1, sat("#2E7A4A"));
       X.fillStyle = cg;
       X.beginPath(); X.ellipse(px, py - r * .55, r, r * .82, 0, 0, 7); X.fill(); edge(1.1);
     } else {                                          /* صخرة */
       const r = 4 + rr(5);
       X.fillStyle = "rgba(12,32,24,.22)";
       X.beginPath(); X.ellipse(px + 1, py + 2, r * 1.2, r * .6, 0, 0, 7); X.fill();
-      X.fillStyle = sat(dk ? "#48584F" : "#B5B098");
+      X.fillStyle = sat("#B5B098");
       X.beginPath(); X.ellipse(px, py - r * .3, r, r * .72, rr(3), 0, 7); X.fill(); edge(1);
       X.fillStyle = "rgba(255,255,255,.28)";
       X.beginPath(); X.ellipse(px - r * .3, py - r * .55, r * .42, r * .26, 0, 0, 7); X.fill();
@@ -1612,7 +1589,7 @@ function ground() {
 const SPR = {};
 const CACHED = { fort: 1, house: 1 };
 function drawCached(nm, px, py, n) {
-  const key = n + "|" + (DK() ? 1 : 0);
+  const key = String(n);
   let c = SPR[nm];
   if (!c || c.key !== key) {
     const cv = document.createElement("canvas");
@@ -1630,7 +1607,7 @@ const RN = (i) => ((Math.sin(i * 12.9898) * 43758.5453) % 1 + 1) % 1;
 /* نجومٌ تتلألأ وشُهبٌ تعبر — أوّل ما يُرسم فوق الأرض */
 function perkStars() {
   X.save();
-  X.fillStyle = DK() ? "rgba(10,20,34,.22)" : "rgba(26,38,84,.15)";
+  X.fillStyle = "rgba(26,38,84,.15)";
   X.fillRect(0, 0, W, H);
   /* دربٌ لبنيّ خافت يعبر السماء */
   X.globalAlpha = .10;
@@ -1711,68 +1688,114 @@ function perkLanterns() {
   });
 }
 
-/* مشاعل الصحن: عمودٌ حديديّ في قِدرٍ من نار — النار تتراقص بثلاث ألسنة
-   بأطوارٍ مختلفة، فلا تنبض كتلةً واحدة. وتطوف الصحن كلّه لا زاويةً منه. */
-function perkTorch() {
-  const P0 = [];
-  /* أركان التقاطع الأربعة — قلب الصحن */
-  [[452, 337], [618, 337], [452, 503], [618, 503]].forEach((q) => P0.push(q));
-  /* وعلى المحورين، متباعدةً حتى أطراف الرواق */
-  for (let i = 0; i < 3; i++) {
-    P0.push([180 + i * 132, 366], [700 + i * 132, 366]);
-    P0.push([180 + i * 132, 474], [700 + i * 132, 474]);
-  }
+/* تعريشات الياسمين: ممرّاتٌ مسقوفة بعريشٍ يتسلّقه الورق ويتفتّح عليه
+   الياسمين، تُلقي ظلًّا مخرّمًا على البلاط — واسمُ المرتبة «ظِلال» فمكافأتُها
+   ظلٌّ يُمشى تحته. وهي **شريطٌ متّصل** لا أقواسٌ متفرّقة: عند تكبير ٠٫٤٤
+   يذوب القوسُ المفرد، ويُقرأ الشريطُ الأخضرُ فوق الممرّ من أوّل نظرة.   */
+function perkArbor() {
+  /* أشواطٌ على المحورين، تتجنّب التقاطع فالمسجد قائمٌ عليه */
+  const RUN = [
+    { x0: 120, x1: 430, y0: 396, y1: 444, h: 1 },
+    { x0: 645, x1: 955, y0: 396, y1: 444, h: 1 },
+    { x0: 511, x1: 559, y0: 105, y1: 330, h: 0 },
+    { x0: 511, x1: 559, y0: 512, y1: 736, h: 0 },
+  ];
+  const HGT = 46;
   X.save();
-  P0.sort((a, b) => (a[0] + a[1]) - (b[0] + b[1])).forEach(([wx, wy], i) => {
-    const px = IX(wx, wy), py = IY(wx, wy);
-    const fl = .74 + Math.sin(ph * 3.1 + i * 1.9) * .26;
-    /* بِركة ضوءٍ على الأرض تتنفّس مع اللهب */
-    X.save(); X.globalAlpha = fl * .40;
-    const lg = X.createRadialGradient(px, py, 1, px, py, 54);
-    lg.addColorStop(0, "#FFB25A"); lg.addColorStop(1, "rgba(255,178,90,0)");
-    X.fillStyle = lg;
-    X.beginPath(); X.ellipse(px, py, 54, 54 * IZ * .62, 0, 0, 7); X.fill();
-    X.restore();
-    shadow(px, py, 7, 3.2, .22);
-    /* العمود */
-    X.strokeStyle = sat("#4A4436"); X.lineWidth = 4.6; X.lineCap = "round";
-    X.beginPath(); X.moveTo(px, py); X.lineTo(px, py - 42); X.stroke();
-    /* القِدر */
-    X.fillStyle = sat("#6E6552");
-    X.beginPath();
-    X.moveTo(px - 12, py - 42); X.lineTo(px + 12, py - 42);
-    X.lineTo(px + 8, py - 30); X.lineTo(px - 8, py - 30);
-    X.closePath(); X.fill(); edge(1.1);
-    X.fillStyle = sat("#B99442");
-    X.beginPath(); X.ellipse(px, py - 42, 12, 4.4, 0, 0, 7); X.fill(); edge(1.2);
-    /* جمرٌ في القِدر */
-    X.globalAlpha = fl;
-    X.fillStyle = "#FF7A2A";
-    X.beginPath(); X.ellipse(px, py - 42, 9, 3.2, 0, 0, 7); X.fill();
-    /* ثلاث ألسنة بأطوارٍ مختلفة */
-    const tongue = (dx, hh, w, c1, c2, ps) => {
-      const f = .8 + Math.sin(ph * 4.3 + ps + i) * .2;
-      const g = X.createLinearGradient(px, py - 44, px, py - 44 - hh * f);
-      g.addColorStop(0, c1); g.addColorStop(1, c2);
-      X.fillStyle = g; X.globalAlpha = .92;
-      X.beginPath();
-      X.moveTo(px + dx - w, py - 44);
-      X.quadraticCurveTo(px + dx - w * .5, py - 44 - hh * f * .6,
-                         px + dx + Math.sin(ph * 3 + ps) * 2.4, py - 44 - hh * f);
-      X.quadraticCurveTo(px + dx + w * .5, py - 44 - hh * f * .6, px + dx + w, py - 44);
-      X.closePath(); X.fill();
+  RUN.sort((a, b) => (a.x0 + a.y0) - (b.x0 + b.y0)).forEach((r, ri) => {
+    const len = r.h ? r.x1 - r.x0 : r.y1 - r.y0;
+    const at = (u, side) => (r.h ? [r.x0 + len * u, side ? r.y1 : r.y0]
+                                 : [side ? r.x1 : r.x0, r.y0 + len * u]);
+    const P = (u, side, up) => {
+      const [wx, wy] = at(u, side);
+      return [IX(wx, wy), IY(wx, wy) - (up ? HGT : 0)];
     };
-    tongue(-5, 24, 5.4, "#F2571E", "rgba(242,87,30,0)", 0);
-    tongue(5, 27, 5.4, "#FF8A24", "rgba(255,138,36,0)", 2.1);
-    tongue(0, 38, 7, "#FFC24A", "rgba(255,194,74,0)", 4.2);
-    tongue(0, 19, 3.6, "#FFF3C0", "rgba(255,243,192,0)", 1.1);
-    /* شررٌ يصعد */
-    X.fillStyle = "#FFD98A";
-    for (let k = 0; k < 3; k++) {
-      const t = ((ph * .9 + k / 3 + i * .21) % 1);
-      X.globalAlpha = (1 - t) * .8;
+    const N = Math.max(3, Math.round(len / 86));      /* عددُ الأعمدة */
+
+    /* ظلٌّ مخرّم على البلاط — هو المكافأة نفسها */
+    X.save(); X.globalAlpha = .13; X.fillStyle = "#12301E";
+    X.beginPath();
+    [[0, 0], [1, 0], [1, 1], [0, 1]].forEach(([u, sd], i) => {
+      const q = P(u, sd, false);
+      i ? X.lineTo(q[0], q[1] + 3) : X.moveTo(q[0], q[1] + 3);
+    });
+    X.closePath(); X.fill(); X.restore();
+
+    /* الأعمدة البعيدة */
+    const post = (u, side) => {
+      const b0 = P(u, side, false), t0 = P(u, side, true);
+      X.fillStyle = lit(b0[0], b0[1], 10, sat("#A8763E"), sat("#6B4A2A"));
       X.beginPath();
-      X.arc(px + Math.sin(ph * 2 + k * 2 + i) * 9 * t, py - 48 - t * 44, 2.2 - t, 0, 7);
+      X.moveTo(b0[0] - 4, b0[1]); X.lineTo(t0[0] - 4, t0[1]);
+      X.lineTo(t0[0] + 4, t0[1]); X.lineTo(b0[0] + 4, b0[1]);
+      X.closePath(); X.fill(); edge(1.2);
+    };
+    for (let k = 0; k <= N; k++) post(k / N, 0);
+
+    /* سقفُ العريش: شريحةٌ خشبية ثم كتلةُ ورقٍ فوقها */
+    const A = P(0, 0, true), B = P(1, 0, true), C = P(1, 1, true), D = P(0, 1, true);
+    X.fillStyle = sat("#8A6440");
+    X.beginPath();
+    [A, B, C, D].forEach((q, i) => (i ? X.lineTo(q[0], q[1] + 4) : X.moveTo(q[0], q[1] + 4)));
+    X.closePath(); X.fill(); edge(1.2);
+    /* العوارض المتصالبة تُرى من تحت الورق */
+    X.strokeStyle = sat("#A8763E"); X.lineWidth = 2;
+    for (let k = 0; k <= N; k++) {
+      const q1 = P(k / N, 0, true), q2 = P(k / N, 1, true);
+      X.beginPath(); X.moveTo(q1[0], q1[1] + 3); X.lineTo(q2[0], q2[1] + 3); X.stroke();
+    }
+    /* الورق: كتلٌ متلاصقة على طول السقف، لها حدّها كأسلوب المشهد */
+    const LN = Math.max(8, Math.round(len / 24));
+    for (let k = 0; k <= LN; k++) {
+      const u = k / LN;
+      const m1 = P(u, 0, true), m2 = P(u, 1, true);
+      const mx = (m1[0] + m2[0]) / 2, my = (m1[1] + m2[1]) / 2;
+      const wob = Math.sin(ph * .7 + k * .9 + ri) * 1.4;
+      const rw = (r.h ? 17 : 15) + Math.sin(k * 1.7) * 2;
+      const g = X.createLinearGradient(mx - rw, my - 10, mx + rw * .7, my + 8);
+      g.addColorStop(0, sat("#5FBE7E")); g.addColorStop(1, sat("#256B44"));
+      X.fillStyle = g;
+      X.beginPath();
+      X.ellipse(mx + wob, my - 6, rw, 12.4, 0, 0, 7); X.fill(); edge(1.2);
+    }
+    /* وياسمينٌ يتفتّح على الورق */
+    for (let k = 0; k < LN * 2; k++) {
+      const u = (k + .5) / (LN * 2);
+      const m1 = P(u, 0, true), m2 = P(u, 1, true);
+      const sd = RN(k + ri * 17);
+      const mx = m1[0] + (m2[0] - m1[0]) * sd, my = m1[1] + (m2[1] - m1[1]) * sd;
+      const wob = Math.sin(ph * .7 + k * .5 + ri) * 1.4;
+      X.fillStyle = "#FFFDF2";
+      for (let q = 0; q < 5; q++) {
+        const a2 = q * 1.2566;
+        X.beginPath();
+        X.ellipse(mx + wob + Math.cos(a2) * 2.2, my - 8 + Math.sin(a2) * 1.6, 1.8, 1.4, a2, 0, 7);
+        X.fill();
+      }
+      X.fillStyle = sat("#F2C94C");
+      X.beginPath(); X.arc(mx + wob, my - 8, 1.2, 0, 7); X.fill();
+    }
+    /* دوالٍ متدلّية من الحافّة القريبة */
+    X.strokeStyle = sat("#2E7A4A"); X.lineWidth = 1.8; X.lineCap = "round";
+    for (let k = 0; k <= LN; k++) {
+      if (k % 2) continue;
+      const q = P(k / LN, 1, true), dl = 9 + RN(k + ri * 5) * 9;
+      X.beginPath();
+      X.moveTo(q[0], q[1] + 2);
+      X.quadraticCurveTo(q[0] + 3, q[1] + dl * .6, q[0] + Math.sin(ph * .9 + k) * 2, q[1] + dl);
+      X.stroke();
+    }
+    /* والأعمدة القريبة تُرسم أخيرًا فتحجب ما خلفها */
+    for (let k = 0; k <= N; k++) post(k / N, 1);
+    /* وريقاتٌ تتساقط من العريش */
+    for (let k = 0; k < 4; k++) {
+      const t = ((ph * .2 + k / 4 + ri * .3) % 1);
+      const u = RN(k + ri * 9);
+      const m = P(u, .5, true);
+      X.globalAlpha = (1 - t) * .85;
+      X.fillStyle = "#FFFDF2";
+      X.beginPath();
+      X.ellipse(m[0] + Math.sin(t * 7 + k) * 10, m[1] + t * (HGT + 6), 2, 1.4, t * 6, 0, 7);
       X.fill();
     }
     X.globalAlpha = 1;
@@ -1885,14 +1908,14 @@ function perkBirds() {
     const lift = flap * w * .6;
     X.globalAlpha = alpha;
     X.lineWidth = Math.max(1.1, w * .28);
-    X.strokeStyle = DK() ? "rgba(230,242,240,.95)" : "rgba(42,58,52,.88)";
+    X.strokeStyle = "rgba(42,58,52,.88)";
     X.beginPath();
     X.moveTo(x - w, y + lift * .4);
     X.quadraticCurveTo(x - w * .44, y - lift, x, y);
     X.quadraticCurveTo(x + w * .44, y - lift, x + w, y + lift * .4);
     X.stroke();
     X.globalAlpha = alpha * .92;
-    X.fillStyle = DK() ? "rgba(230,242,240,.92)" : "rgba(42,58,52,.85)";
+    X.fillStyle = "rgba(42,58,52,.85)";
     X.beginPath(); X.ellipse(x, y + w * .07, w * .24, w * .12, 0, 0, 7); X.fill();
   };
 
@@ -1922,16 +1945,16 @@ function perkBirds() {
 }
 
 function perksBack()  { if (PERKON.stars) perkStars(); if (PERKON.lantern) perkLanterns();
-                        if (PERKON.torch) perkTorch(); }
+                        if (PERKON.arbor) perkArbor(); }
 function perksFront() { if (PERKON.flag) perkBanners();
                         if (PERKON.blossom) perkBlossom(); if (PERKON.birds) perkBirds();
                         if (PERKON.meteor) perkMeteor(); }
 
 /* الأرض ثابتة لا تتغيّر — تُرسم مرّة واحدة لكل ثيم وتُنسخ كصورة كل إطار.
    بدونها نُعيد ٧٢٠ عملية رسم ستّين مرّة في الثانية على الجوال.          */
-const GCACHE = { light: null, dark: null };
+const GCACHE = { v: null };
 function groundLayer() {
-  const key = DK() ? "dark" : "light";
+  const key = "v";
   if (GCACHE[key]) return GCACHE[key];
   const c = document.createElement("canvas");
   c.width = W; c.height = H;
@@ -2003,7 +2026,6 @@ export function Village({ st, theme = "light" }) {
   const capRef = useRef(30);
   const solidRef = useRef([]);     /* ما لا يُمشى فوقه */
 
-  useEffect(() => { DKMODE = theme === "dark"; }, [theme]);
 
   /* الأبنية تُحسب عند تغيّر السجلّ أو اليوم فقط — لا في كل إطار */
   const cap = days.length;                     /* الشهر ٢٩ أو ٣٠ يومًا */
@@ -2101,6 +2123,7 @@ export function Village({ st, theme = "light" }) {
           if (!hit(P.current.x, cy2)) P.current.y = cy2;
         }
         P.current.f++;
+        PSTATE.x = P.current.x; PSTATE.y = P.current.y;
       }
       raf = requestAnimationFrame(move);
     };
@@ -2158,11 +2181,23 @@ export function Village({ st, theme = "light" }) {
         Object.keys(SPOT).forEach((nm) => {
           if (FLAT[nm]) return;
           if (nm !== "dome" && !snap[nm]) return;      /* لم يُبنَ بعد */
+          if (nm === "fort") {
+            /* السور ثلاثون قطعةً على المحيط، فبصمتُه ثلاثون لا واحدة —
+               وإلا صدَّ الأرضَ كلَّها. وما لم يُبنَ منه بعدُ لا يصدّ. */
+            const k = Math.min(snap.fort, DCAP);
+            for (let i = 0; i < k; i++) {
+              const [wa, wb, o] = WALL[i], hx = o === "h" ? 34 : 18, hy = o === "h" ? 18 : 34;
+              sd.push([wa - hx, wb - hy, wa + hx, wb + hy]);
+            }
+            return;
+          }
           const ex = EXTENT[nm];
           if (ex) sd.push([ex.x0, ex.y0, ex.x1, ex.y1]);
-          else { const [a, b] = SPOT[nm]; sd.push([a - 15, b - 11, a + 15, b + 11]); }
+          else { const [a, b] = SPOT[nm], r = FOOT[nm] || 14;
+                 sd.push([a - r, b - r, a + r, b + r]); }
         });
         solidRef.current = sd;
+        PSTATE.solids = sd;
       }
 
       /* قفزة النشأة: تمدّد ثم استقرار حول قاعدة البناء */
@@ -2190,8 +2225,10 @@ export function Village({ st, theme = "light" }) {
         const it = ITEMS.find((i) => i.i === nm); if (!it) return;
         const [a, b] = SPOT[nm], px = IX(a, b), py = IY(a, b);
         const pop = popAt(nm, px, py);
+        claimStart(nm);
         if (CACHED[nm]) drawCached(nm, px, py, t[it.k] || 0);
         else DRAW[nm](px, py, t[it.k] || 0);
+        CLAIM = null;
         if (pop) X.restore();
       });
       /* بريقٌ يجري في ماء القناة — الأرض مخزّنة صورةً فلا حركة فيها،
@@ -2218,8 +2255,10 @@ export function Village({ st, theme = "light" }) {
         /* العمق في الإيزومتري = س+ص، وهو نفسه إحداثي الشاشة الرأسي */
         objs.push({ y: py, f: () => {
           const pop = popAt(nm, px, py), sw = swayAt(nm, px, py);
+          claimStart(nm);
           if (CACHED[nm]) drawCached(nm, px, py, n);
           else DRAW[nm](px, py, n);
+          CLAIM = null;
           if (sw) X.restore();
           if (pop) X.restore();
         } });
@@ -2229,12 +2268,28 @@ export function Village({ st, theme = "light" }) {
         const [ax, ay] = SPOT.dome, mx = IX(ax, ay), my = IY(ax, ay);
         objs.push({ y: my, f: () => {
           const pop = popAt("dome", mx, my);
+          claimStart("dome");
           DRAW.dome(mx, my, MLV);
+          CLAIM = null;
           if (pop) X.restore();
         } });
       }
       objs.push({ y: pjy, f: () => drawPlayer(P.current, pjx, pjy) });
       objs.sort((m, n) => m.y - n.y).forEach((o) => o.f());
+
+      /* منفذُ اختبار: `window.SILLA_SOLIDS = 1` يرسم بصمات الصدّ على الأرض،
+         فيُرى بالعين أن بصمة كل بناء تحته لا بجانبه. لا تُشغّله الواجهة. */
+      if (typeof window !== "undefined" && window.SILLA_SOLIDS) {
+        solidRef.current.forEach((q) => {
+          X.beginPath();
+          [[q[0],q[1]],[q[2],q[1]],[q[2],q[3]],[q[0],q[3]]]
+            .forEach(([u, v], i) => (i ? X.lineTo(IX(u, v), IY(u, v))
+                                       : X.moveTo(IX(u, v), IY(u, v))));
+          X.closePath();
+          X.fillStyle = "rgba(255,0,0,.26)"; X.fill();
+          X.strokeStyle = "#FF0000"; X.lineWidth = 2 / ZOOM; X.stroke();
+        });
+      }
 
       /* إطار الاختيار: معيّنٌ ينبض على الأرض تحت ما ضُغط */
       const selNow = selRef.current;
@@ -2277,7 +2332,7 @@ export function Village({ st, theme = "light" }) {
       /* عمق جوّي */
       const vg = X.createRadialGradient(cw / 2, ch / 2, ch * .32, cw / 2, ch / 2, ch * .95);
       vg.addColorStop(0, "rgba(0,0,0,0)");
-      vg.addColorStop(1, DK() ? "rgba(6,20,18,.34)" : "rgba(60,80,64,.15)");
+      vg.addColorStop(1, "rgba(60,80,64,.15)");
       X.fillStyle = vg; X.fillRect(0, 0, cw, ch);
       /* أقرب بناء */
       let best = null, nd = 1e9;
@@ -2892,7 +2947,7 @@ const SoundBtn = () => {
 const FILM_SKY = {
   flag:    "linear-gradient(180deg,#BFE6F5,#E8F6E2)",
   blossom: "linear-gradient(180deg,#CDEBF7,#F2E6F0)",
-  torch:   "linear-gradient(180deg,#2A2036,#4A2A22)",
+  arbor:   "linear-gradient(180deg,#CFEAF2,#DFF0DC)",
   birds:   "linear-gradient(180deg,#9FD8F2,#DCF0F7)",
   lantern: "linear-gradient(180deg,#1F2C3E,#3A3448)",
   stars:   "linear-gradient(180deg,#0B1430,#1E2A4E)",
@@ -2932,22 +2987,31 @@ function FilmScene({ k }) {
       </g>
     );
   }
-  if (k === "torch") {
+  if (k === "arbor") {
     return (
       <g>
-        <path d="M0 54h120" stroke="#3A2E2A" strokeWidth="12" strokeLinecap="round" />
-        {[30, 60, 90].map((x, i) => (
-          <g key={x}>
-            <circle className="fl-glow" cx={x} cy="30" r="17" fill="#FF9A3C" opacity=".3"
-              style={{ animationDelay: `${i * .3}s` }} />
-            <path d={`M${x} 50V34`} stroke="#4A4436" strokeWidth="3" strokeLinecap="round" />
-            <path d={`M${x - 7} 33h14l-2.6 6h-8.8z`} fill="#8A7A58"
-              stroke="rgba(0,0,0,.4)" strokeWidth="1" strokeLinejoin="round" />
-            <path className="fl-fire" style={{ animationDelay: `${i * .27}s`, transformOrigin: `${x}px 33px` }}
-              d={`M${x} 8c5 9 7 12 7 17a7 7 0 0 1-14 0c0-5 2-8 7-17z`} fill="#FF8A24" />
-            <path className="fl-fire" style={{ animationDelay: `${i * .27 + .16}s`, transformOrigin: `${x}px 33px` }}
-              d={`M${x} 17c2.6 5 3.6 7 3.6 9.6a3.6 3.6 0 0 1-7.2 0c0-2.6 1-4.6 3.6-9.6z`} fill="#FFEBAE" />
+        <path d="M0 56h120" stroke="#CBBFA0" strokeWidth="12" strokeLinecap="round" />
+        {[24, 60, 96].map((x, i) => (
+          <g key={x} className="fl-sway" style={{ animationDelay: `${i * .6}s`,
+                                                  transformOrigin: `${x}px 52px` }}>
+            <path d={`M${x - 13} 52V22`} stroke="#8A6440" strokeWidth="3" strokeLinecap="round" />
+            <path d={`M${x + 13} 52V22`} stroke="#8A6440" strokeWidth="3" strokeLinecap="round" />
+            <path d={`M${x - 16} 21h32`} stroke="#A8763E" strokeWidth="3.4" strokeLinecap="round" />
+            {[-11, 0, 11].map((d, j) => (
+              <ellipse key={j} cx={x + d} cy="17" rx="8.5" ry="6.4" fill="#3E9E68"
+                stroke="rgba(0,0,0,.35)" strokeWidth="1.2" />
+            ))}
+            {[-13, -4, 6, 14].map((d, j) => (
+              <g key={j}>
+                <circle cx={x + d} cy={13 + (j % 2) * 7} r="2.6" fill="#FFFDF2" />
+                <circle cx={x + d} cy={13 + (j % 2) * 7} r="1" fill="#F2C94C" />
+              </g>
+            ))}
           </g>
+        ))}
+        {[0, 1, 2].map((i) => (
+          <circle key={i} className="fl-fall" cx={22 + i * 37} cy="20" r="2" fill="#FFFDF2"
+            style={{ animationDelay: `${i * 1.1}s`, animationDuration: "3.4s" }} />
         ))}
       </g>
     );
@@ -3750,19 +3814,14 @@ export default function SillaBustan({ theme = "light", initialLog = {}, editable
 function Styles() {
   return (
     <style>{`
-      [data-theme="light"]{
+      /* لوحةٌ واحدة نهارية — لا نسخةَ غامقة. جُرّبت فرُفضت: قاتمةً كئيبة.
+         وتُكتب على الوسمين معًا فلا يغيّرها ثيم الموقع (§٩). */
+      [data-theme="light"],[data-theme="dark"],:root{
         --sp-bg:#F4F6F5; --sp-surf:#FFF; --sp-surf2:#F0F5F3; --sp-line:#E2E9E6;
         --sp-prim:#2F7D74; --sp-mint:#6BBFB2; --sp-mintBg:rgba(107,191,178,.11);
         --sp-gold:#B99442; --sp-goldL:#D4B570; --sp-txt:#1F3B37; --sp-mut:#8B9C98;
         --sp-aura:rgba(185,148,66,.16); --sp-sh:0 2px 10px rgba(31,59,55,.05);
         --sp-scrim:rgba(255,255,255,.93); --sp-danger:#C2544D;
-      }
-      [data-theme="dark"]{
-        --sp-bg:#16262E; --sp-surf:#1D323B; --sp-surf2:#243C46; --sp-line:#2E4B56;
-        --sp-prim:#6BBFB2; --sp-mint:#7FCFC2; --sp-mintBg:rgba(127,207,194,.13);
-        --sp-gold:#D4B570; --sp-goldL:#E5CF9A; --sp-txt:#EAF2F2; --sp-mut:#93AEB4;
-        --sp-aura:rgba(212,181,112,.15); --sp-sh:0 3px 14px rgba(0,0,0,.26);
-        --sp-scrim:rgba(29,50,59,.93); --sp-danger:#E0796F;
       }
       input,textarea,select{font-size:16px}
       button{font-family:inherit;cursor:pointer}
@@ -3796,11 +3855,10 @@ function Styles() {
                         12%{opacity:1}
                         88%{opacity:1}
                         100%{transform:translate(-22px,74px) rotate(260deg);opacity:0}}
-      .fl-fire{animation:flFire .7s ease-in-out infinite}
-      @keyframes flFire{0%,100%{transform:scale(1)}
-                        50%{transform:scale(.9,1.24)}}
       .fl-glow{animation:flGlow 1.6s ease-in-out infinite}
       @keyframes flGlow{0%,100%{opacity:.24}50%{opacity:.62}}
+      .fl-sway{animation:flSway 3.2s ease-in-out infinite}
+      @keyframes flSway{0%,100%{transform:rotate(-1.6deg)}50%{transform:rotate(1.6deg)}}
       .fl-swing{animation:flSwing 2.6s ease-in-out infinite}
       @keyframes flSwing{0%,100%{transform:rotate(-7deg)}50%{transform:rotate(7deg)}}
       .fl-twinkle{animation:flTwinkle 2.2s ease-in-out infinite}
@@ -3817,8 +3875,8 @@ function Styles() {
                          100%{transform:translate(152px,64px);opacity:0}}
       @media (prefers-reduced-motion:reduce){
         .sp-tap,.sp-pop,.sp-tile,.sp-shine::after{transition:none;animation:none}
-        .fl-wave,.fl-fall,.fl-fire,.fl-glow,.fl-swing,.fl-twinkle,
-        .fl-cross,.fl-flap,.fl-shoot{animation:none}
+        .fl-wave,.fl-fall,.fl-glow,.fl-swing,.fl-twinkle,
+        .fl-cross,.fl-flap,.fl-shoot,.fl-sway{animation:none}
       }
     `}</style>
   );
