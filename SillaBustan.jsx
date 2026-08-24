@@ -286,7 +286,7 @@ export function useSunanVersion() {
 /* حدٌّ داكن سميك حول كل جسم — أظهر ما يميّز المشهد.
    المشهد يُرسم بتكبير ٠٫٤٤، فحدٌّ بعرض ٢ يظهر أقلّ من بكسل. والعرض هنا
    بمقياس المشهد: يُقسَم على ZOOM ليصل إلى العين بالسماكة المقصودة. */
-const OUT = () => (DK() ? "#0A1A14" : "#22392C");
+const OUT = () => (sat("#22392C"));
 function edge(w) {
   X.strokeStyle = OUT(); X.lineWidth = (w || 1) / ZOOM;
   X.lineJoin = "round"; X.lineCap = "round"; X.stroke(); return true;
@@ -294,10 +294,34 @@ function edge(w) {
 
 /* تشبّعٌ مركزيّ: بدل تغيير كل لون في السـتّة والعشرين رسّامًا، يمرّ اللون
    من هنا فيشتدّ تشبّعه ويتباعد فاتحه عن داكنه — وهو جوهر ألوان المشهد. */
-const SATC = {};
-function sat(hex) {
-  if (typeof hex !== "string" || hex[0] !== "#" || hex.length < 7) return hex;
-  const memo = SATC[hex]; if (memo) return memo;
+/* ── من الست وعشرين رسّامًا إلى بوّابةٍ واحدة ──
+   كل لونٍ في المشهد يمرّ من هنا. ولذلك تُكتب الألوان **نهارًا فقط**،
+   ويُشتقّ الليل منها في هذه البوّابة: فلا لوحةُ ليلٍ ثانية تُنسى عند
+   تعديل النهار، ولا مشهدان يتباعدان.                                   */
+const SATC = { l: {}, d: {} };
+/* اللون الخارج من هنا يُختم بـ FF (شفافية تامّة لا تغيّر شيئًا في اللوحة)،
+   فيُعرف عند دخوله ثانيةً فلا يُشبَّع مرّتين — والرسّام الواحد قد يمرّر
+   لونه إلى isoBox أو lit فيمرّ من البوّابة مرّتين. */
+const DONE = (c) => c.length === 9;
+
+/* ما يضيء بذاته لا يخفت بالليل بل يشتدّ — الذهب والماء والقمر واللهب.
+   المفتاح لونُه النهاريّ، والقيمة كم يُرفع ضوؤه ليلًا.                  */
+const GLOW = {
+  "#B99442": 2.0, "#C9A54A": 1.9, "#D8B45E": 1.8, "#C9A96A": 1.8,
+  "#D9BE7E": 1.8, "#EBD9A0": 1.7, "#A78B52": 1.7, "#C2A24E": 1.9,
+  "#9DD9F2": 1.5, "#A8E4F8": 1.5, "#5FAEC9": 1.4, "#3E8FBE": 1.4,
+  "#F5EBD4": 1.5, "#F8EFDA": 1.4, "#FBF4E0": 1.4,
+  /* الماء والرخام يلمعان تحت القمر */
+  "#5FD0F5": 1.4, "#2E96D4": 1.3, "#FBF5E4": 1.1, "#E8D9AE": 1.05,
+  "#E8B22C": 1.9,
+  /* والأرض القاحلة خارج الحدّ تغرق أكثر، فيبقى البستان هو المضيء وسطها */
+  "#CFCCC0": .5, "#B4B1A4": .58,
+};
+
+/* لون ضوء القمر — يُمزج بكل لونٍ ليلًا فيوحّد كسوة المشهد */
+const MOON = [0x1C, 0x38, 0x52];
+
+function hsl3(hex) {
   const r = parseInt(hex.slice(1, 3), 16) / 255,
         g = parseInt(hex.slice(3, 5), 16) / 255,
         b = parseInt(hex.slice(5, 7), 16) / 255;
@@ -309,9 +333,9 @@ function sat(hex) {
     h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
     h /= 6;
   }
-  sv = Math.min(1, sv * 2.35 + .16);
-  /* ودفعُ الفاتح إلى الفتوح والداكن إلى العمق — التباين هو ما يُحيي المشهد */
-  const L = Math.min(.95, Math.max(.06, l + (l > .55 ? .09 : l < .34 ? -.10 : 0)));
+  return [h, sv, l];
+}
+function hex3(h, sv, L) {
   const q = L < .5 ? L * (1 + sv) : L + sv - L * sv, pq = 2 * L - q;
   const ch = (t) => {
     t = (t + 1) % 1;
@@ -320,7 +344,41 @@ function sat(hex) {
             : t < 2 / 3 ? pq + (q - pq) * (2 / 3 - t) * 6 : pq;
     return Math.round(v * 255).toString(16).padStart(2, "0");
   };
-  return (SATC[hex] = "#" + ch(h + 1 / 3) + ch(h) + ch(h - 1 / 3));
+  return "#" + ch(h + 1 / 3) + ch(h) + ch(h - 1 / 3);
+}
+
+/* الليل ضوءٌ أقلّ لا لونٌ آخر: يُخفَض ضوءُ اللون ويُمال قليلًا إلى زُرقة
+   القمر ويبقى تشبّعه — فيبقى الحجر حجرًا والعشب عشبًا تحت ضوءٍ آخر.
+   وترتيب الإضاءة محفوظ: ما كان أفتح نهارًا يبقى أفتح ليلًا.            */
+function night(hex, k) {
+  const [h, sv, l] = hsl3(hex), kk = k || 1;
+  /* ١) الصفاء (chroma) لا التشبّع (S): لونٌ شبه أبيضَ تشبّعُه ١٠٠٪ صفاؤه
+        ضئيل، فلو حُفظ تشبّعه وحده لانفجر لونًا صارخًا عند خفض ضوئه. */
+  const C = (1 - Math.abs(2 * l - 1)) * sv;
+  const L2 = Math.max(.04, Math.min(.78, (.09 + l * .30) * kk));
+  const S2 = Math.min(1, (C * .88) / Math.max(.001, 1 - Math.abs(2 * L2 - 1)));
+  /* ٢) والصبغة لا تُدار: إدارتها نحو الزرقة تُحيل الكِرَم إلى زيتونيّ.
+        بل يُمزج ضوء القمر بالنتيجة، فتبرد كسوةُ المشهد كلّه معًا.     */
+  const out = hex3(h, S2, L2), mix = kk > 1.2 ? .06 : .30;
+  const ch = (i) => Math.round(parseInt(out.slice(1 + i * 2, 3 + i * 2), 16) * (1 - mix)
+                             + MOON[i] * mix).toString(16).padStart(2, "0");
+  return "#" + ch(0) + ch(1) + ch(2);
+}
+
+/* تشبّعٌ مركزيّ: اللون يشتدّ تشبّعه ويتباعد فاتحه عن داكنه — وهو جوهر
+   ألوان المشهد. ثم يمرّ على الليل إن كان الثيم غامقًا.                  */
+function sat(hex) {
+  if (typeof hex !== "string" || hex[0] !== "#" || hex.length < 7) return hex;
+  if (DONE(hex)) return hex;
+  const dk = DK() ? 1 : 0, memo = SATC[dk ? "d" : "l"][hex];
+  if (memo) return memo;
+  const [h, sv0, l] = hsl3(hex);
+  const sv = Math.min(1, sv0 * 2.35 + .16);
+  /* ودفعُ الفاتح إلى الفتوح والداكن إلى العمق — التباين هو ما يُحيي المشهد */
+  const L = Math.min(.95, Math.max(.06, l + (l > .55 ? .09 : l < .34 ? -.10 : 0)));
+  let out = hex3(h, sv, L);
+  if (dk) out = night(out, GLOW[hex.toUpperCase()] || GLOW[hex] || 1);
+  return (SATC[dk ? "d" : "l"][hex] = out + "FF");
 }
 
 /* ════════ المراتب ════════
@@ -330,12 +388,13 @@ function sat(hex) {
 /* ما تفتحه المراتب — كلٌّ منها شيءٌ يُرى في البستان، لا رقمٌ ولا لون.
    وهي إضافاتٌ على المشهد، لا تمسّ الأبنية الـ٢٦ ولا مواضعها (§٣). */
 export const PERKS = {
-  jet:     { n:"نافورة البحرة",   ic:"fountain", d:"يتدفّق الماء من قلب الصحن." },
   flag:    { n:"رايات الأسوار",   ic:"feather",  d:"راياتٌ ترفرف على سور بستانك كلّه." },
   blossom: { n:"زهرٌ في الريح",   ic:"leaf",     d:"وريقاتٌ تتطاير في أرضك." },
+  torch:   { n:"مشاعل الصحن",     ic:"sparkle",  d:"نارٌ تتراقص على أعمدة صحنك." },
   birds:   { n:"طيورٌ تحلّق",     ic:"feather",  d:"أسرابٌ تعبر سماء بستانك." },
   lantern: { n:"فوانيس الممرّات", ic:"lamp",     d:"فوانيس تضيء دروبك." },
   stars:   { n:"سماء النجوم",     ic:"star",     d:"نجومٌ تتلألأ فوق البستان." },
+  meteor:  { n:"وابل الشُّهب",     ic:"moonstar", d:"شُهبٌ تنهمر فوق أرضك." },
 };
 export const PERK_KEYS = Object.keys(PERKS);
 
@@ -344,13 +403,13 @@ export const LS_TIERS = "silla.tiers.v1";
    واحدًا — والتباعد هو ما يجعل كلَّ مرتبةٍ تُميَّز من بعيد. */
 const DEFAULT_TIERS = [
   { id:"t1", n:"غَرْس",    g:0,    c:"#00D6A6", r:"",        d:"بدأتَ الغرس — أوّل أثرٍ في أرضك." },
-  { id:"t2", n:"رَوْضة",   g:200,  c:"#4BE04B", r:"jet",     d:"اخضرّت أرضك، وتدفّقت بحرتها." },
-  { id:"t3", n:"مُثمِر",   g:500,  c:"#FFC414", r:"flag",    d:"أثمر غرسك، وعَلَت راياتك على السور." },
-  { id:"t4", n:"ظِلال",    g:900,  c:"#FF7A18", r:"blossom", d:"امتدّت ظلالها، وتطاير زهرها." },
+  { id:"t2", n:"رَوْضة",   g:200,  c:"#4BE04B", r:"flag",    d:"اخضرّت أرضك، وعَلَت راياتك على سورها." },
+  { id:"t3", n:"مُثمِر",   g:500,  c:"#FFC414", r:"blossom", d:"أثمر غرسك، وتطاير زهره في الريح." },
+  { id:"t4", n:"ظِلال",    g:900,  c:"#FF7A18", r:"torch",   d:"امتدّت ظلالها، واتّقدت مشاعل صحنها." },
   { id:"t5", n:"وارِف",    g:1400, c:"#FF3D68", r:"birds",   d:"وَرَفَ ظلّه، وعبرت سماءه الطير." },
   { id:"t6", n:"نُور",     g:2000, c:"#A03CFF", r:"lantern", d:"أضاءت دروبه بالفوانيس." },
   { id:"t7", n:"سَكينة",   g:2800, c:"#1E90FF", r:"stars",   d:"سكن تحت سماءٍ من نجوم." },
-  { id:"t8", n:"زاهِر",    g:4000, c:"#FFD426", r:"",        d:"بلغتَ أعلاه — بستانٌ زاهرٌ تامّ." },
+  { id:"t8", n:"زاهِر",    g:4000, c:"#FFD426", r:"meteor",  d:"بلغتَ أعلاه — وانهمرت فوقه الشُّهب." },
 ];
 export let TIERS = DEFAULT_TIERS.map((t) => ({ ...t }));
 let tierVer = 0;
@@ -627,7 +686,7 @@ function puff(x, y, e) {
     const rr = r * (0.72 + (i % 3) * 0.16);
     const sz = (9 + e * 13) * (0.7 + (i % 2) * 0.4);
     X.globalAlpha = k * k * 0.72;
-    X.fillStyle = DK() ? "#8FA096" : "#C9BC9C";
+    X.fillStyle = sat("#C9BC9C");
     X.beginPath();
     X.ellipse(x + Math.cos(a) * rr * 1.3, y + Math.sin(a) * rr * IZ + 2 - e * 9,
               sz, sz * IZ, 0, 0, 7);
@@ -635,7 +694,7 @@ function puff(x, y, e) {
   }
   /* حلقة أرضية تندفع خارجةً */
   X.globalAlpha = k * 0.5; X.lineWidth = 3 * k;
-  X.strokeStyle = DK() ? "#A9BAAF" : "#D8CCAE";
+  X.strokeStyle = sat("#D8CCAE");
   X.beginPath(); X.ellipse(x, y + 2, r * 1.35, r * 1.35 * IZ, 0, 0, 7); X.stroke();
   X.globalAlpha = 1;
 }
@@ -754,62 +813,62 @@ DRAW.fort=(x,y,n)=>{
  /* حجر كلسيّ كحجر الصحن — لا رمادي يخالفه */
  /* حجرٌ كلسيّ كِرَم — لا أمبريّ. الأمبر يصبغ المشهد كلّه بصفرةٍ ثقيلة،
     والكِرَم الهادئ يترك الخضرةَ هي التي تحمل الحياة. */
- const top=DK()?'#4E5A50':'#EDE4CE',rgt=DK()?'#3A4740':'#D3C6A9',lft=DK()?'#28332E':'#B0A386';
+ const top=sat('#EDE4CE'),rgt=sat('#D3C6A9'),lft=sat('#B0A386');
  seg.forEach(({a,b,o})=>{
   const sx=o==='h'?30:16,sy=o==='h'?16:30;
   isoBox(a,b,sx,sy,26,top,rgt,lft);                    /* بدن البرج */
-  isoBox(a,b,sx*1.12,sy*1.12,5,DK()?'#5C6A5E':'#F5EEDF',rgt,lft,26);  /* شرفة تعلوه */
+  isoBox(a,b,sx*1.12,sy*1.12,5,sat('#F5EEDF'),rgt,lft,26);  /* شرفة تعلوه */
  })};
 
 /* ── بيوت الرواتب: حيّ يصل ٣٠ بيتًا ── */
 DRAW.house=(x,y,n)=>{const k=Math.min(n,DCAP);
  /* الشبكة في فضاء الأرض لا الشاشة، فتُسقَط صفوفًا مائلة كحيٍّ حقيقي.
     (x,y) الواصلان مُسقَطان أصلًا، فنستعيد مركز الحيّ من موضعه في SPOT. */
- const col={wallTop:DK()?'#CDBE92':'#F6EDD8',wallR:DK()?'#B5A57C':'#E4D7BB',
-            wallL:DK()?'#8C7C58':'#C2B291',
-            roofBack:DK()?'#8E6438':'#B98A52',roofFront:DK()?'#C08A50':'#DBA968',
-            gable:DK()?'#7E5A32':'#A87B47'};
+ const col={wallTop:sat('#F6EDD8'),wallR:sat('#E4D7BB'),
+            wallL:sat('#C2B291'),
+            roofBack:sat('#B98A52'),roofFront:sat('#DBA968'),
+            gable:sat('#A87B47')};
  const cells=plot('house',k,6,40,30,true,20).map(({wx,wy})=>({a:wx,b:wy}));
  cells.forEach(({a,b})=>{
   isoHouse(a,b,17,15,19,14,col);
   /* باب ونافذتان على الوجه الأمامي */
   const fx=IX(a,b+15),fy=IY(a,b+15);
-  X.fillStyle=DK()?'#5E4530':'#7A5A3A';X.fillRect(fx-4,fy-14,8,13);
+  X.fillStyle=sat('#7A5A3A');X.fillRect(fx-4,fy-14,8,13);
   X.fillStyle='#FFEBAE';X.fillRect(fx-14,fy-17,6,6);X.fillRect(fx+8,fy-17,6,6)})};
 
 /* ── المحراب: يعلو ويتعدّد ── */
 DRAW.mihrab=(x,y,n)=>{const k=Math.min(Math.ceil(n*5/DCAP),5);if(!k)return;
  const [mx,my]=SPOT.mihrab,h=32+Math.min(n,DCAP)*.7,half=k*16,dep=11;
  isoBox(mx,my,half,dep,h,
-  DK()?'#E4D0A0':'#F8EFDA',DK()?'#C2AD80':'#E0D3B4',DK()?'#9E8B62':'#C4B492');
+  sat('#F8EFDA'),sat('#E0D3B4'),sat('#C4B492'));
  /* القناطر محفورة في الوجه الأمامي — قاعدة كلٍّ على حافّته المائلة */
  for(let i=0;i<k;i++){
   const wx=mx-half+(i+.5)*(half*2/k);
   const bx=IX(wx,my+dep),by=IY(wx,my+dep),w=half/k*.62;
-  X.fillStyle=DK()?'#0C231E':'#4E7A60';
+  X.fillStyle=sat('#4E7A60');
   X.beginPath();X.moveTo(bx-w,by);X.lineTo(bx-w,by-h+15);
   X.quadraticCurveTo(bx,by-h-1,bx+w,by-h+15);X.lineTo(bx+w,by);X.closePath();X.fill();
-  X.strokeStyle=DK()?'#D4B570':'#B99442';X.lineWidth=1.3;X.stroke();
+  X.strokeStyle=sat('#B99442');X.lineWidth=1.3;X.stroke();
   X.fillStyle='rgba(255,255,255,.16)';X.fillRect(bx-w,by-h+15,2,h-15)}};
 
 /* ── المئذنة: ترتفع مع الأيام (سقف ٣٠) ── */
 DRAW.minaret=(x,y,n)=>{if(!n)return;const h=26+Math.min(n,DCAP)*2.2;shadow(x,y,10,4);
- X.fillStyle=lit(x,y,16,DK()?'#E0CB96':'#F5EBD4',DK()?'#A08B5E':'#C2B08E');
+ X.fillStyle=lit(x,y,16,sat('#F5EBD4'),sat('#C2B08E'));
  X.fillRect(x-7,y-h,14,h);
  X.fillStyle='rgba(255,255,255,.18)';X.fillRect(x-7,y-h,3,h);
  const rings=Math.floor(Math.min(n,DCAP)/8);
- for(let k=1;k<=rings;k++){X.fillStyle=DK()?'#B8A176':'#D8C9A6';
+ for(let k=1;k<=rings;k++){X.fillStyle=sat('#D8C9A6');
   X.fillRect(x-10,y-h*k/(rings+1),20,4)}
- X.fillStyle=DK()?'#D4B570':'#C9A96A';X.beginPath();X.arc(x,y-h,8,Math.PI,0);X.fill();
- X.fillStyle=DK()?'#E5CF9A':'#D9BE7E';X.fillRect(x-1.3,y-h-14,2.6,8);
+ X.fillStyle=sat('#C9A96A');X.beginPath();X.arc(x,y-h,8,Math.PI,0);X.fill();
+ X.fillStyle=sat('#D9BE7E');X.fillRect(x-1.3,y-h-14,2.6,8);
  X.beginPath();X.arc(x,y-15-h,2.6,0,7);X.fill()};
 
 /* ── السجادة: تكبر مع الأيام ── */
 DRAW.rug=(x,y,n)=>{if(!n)return;const s=.5+Math.min(n,DCAP)/DCAP*1.6;
  shadow(x,y,26*s,7*s,.14);
- const g=lit(x,y,54*s,DK()?'#A0576C':'#D08FA4',DK()?'#6E3A4C':'#A86478');
+ const g=lit(x,y,54*s,sat('#D08FA4'),sat('#A86478'));
  X.fillStyle=g;X.beginPath();X.ellipse(x,y,27*s,10*s,0,0,7);X.fill();
- X.strokeStyle=DK()?'#E5CF9A':'#EBD9A0';X.lineWidth=1.4;
+ X.strokeStyle=sat('#EBD9A0');X.lineWidth=1.4;
  X.beginPath();X.ellipse(x,y,20*s,7*s,0,0,7);X.stroke();
  X.beginPath();X.ellipse(x,y,12*s,4*s,0,0,7);X.stroke();
  for(let i=0;i<8;i++){const a=i*.785;
@@ -826,9 +885,9 @@ DRAW.stream=(x,y,n)=>{
  for(let i=0;i<=10;i++){const wx=IN.x+30+i*(IN.w-60)/10,wv=wy+Math.sin(i*.75)*22;
   pts.push([IX(wx,wv),IY(wx,wv)])}
  /* مجرى جافّ */
- X.strokeStyle=DK()?'rgba(70,64,48,.6)':'rgba(190,178,148,.75)';X.lineWidth=30;X.lineCap='round';
+ X.strokeStyle=sat('#BEB294');X.lineWidth=30;X.lineCap='round';
  X.beginPath();X.moveTo(pts[0][0],pts[0][1]);pts.forEach(p=>X.lineTo(p[0],p[1]));X.stroke();
- X.strokeStyle=DK()?'rgba(50,46,34,.7)':'rgba(168,156,126,.8)';X.lineWidth=22;
+ X.strokeStyle=sat('#A89C7E');X.lineWidth=22;
  X.beginPath();X.moveTo(pts[0][0],pts[0][1]);pts.forEach(p=>X.lineTo(p[0],p[1]));X.stroke();
  if(!n)return;
  const last=pts.length-1;
@@ -845,7 +904,7 @@ DRAW.stream=(x,y,n)=>{
  for(let i=seg;i>=0;i--)X.lineTo(pts[i][0],pts[i][1]+46);
  X.closePath();X.clip();
  const g=X.createLinearGradient(0,y-14,0,y+14);
- g.addColorStop(0,DK()?'#5FA8C8':'#9DD9F2');g.addColorStop(1,DK()?'#2E6B8E':'#5FAEC9');
+ g.addColorStop(0,sat('#9DD9F2'));g.addColorStop(1,sat('#5FAEC9'));
  X.strokeStyle=g;X.lineWidth=22;X.lineCap='round';
  X.beginPath();X.moveTo(pts[0][0],pts[0][1]);pts.forEach(p=>X.lineTo(p[0],p[1]));X.stroke();
  X.strokeStyle='rgba(255,255,255,.34)';X.lineWidth=3;X.beginPath();
@@ -858,7 +917,7 @@ DRAW.palm=(x,y,n)=>{const k=Math.min(n,DCAP);
  plot('palm',k,6,30,27).forEach(({wx,wy,i})=>{
   const a=IX(wx,wy),b=IY(wx,wy),s=.58+((i*7)%3)*.07;
   shadow(a,b,9,3.4);
-  trunk(a,b,4.4*s,42*s,DK()?'#7E5A38':'#A87C4E',DK()?'#4A3220':'#6B4A2A');
+  trunk(a,b,4.4*s,42*s,sat('#A87C4E'),sat('#6B4A2A'));
   for(let r=1;r<5;r++){X.fillStyle='rgba(0,0,0,.10)';
    X.fillRect(a-3.6*s,b-(9+r*7)*s,7.2*s,1.4*s)}
   const sw=Math.sin(ph*.7+i)*.07;
@@ -866,18 +925,18 @@ DRAW.palm=(x,y,n)=>{const k=Math.min(n,DCAP);
   [[-1,-.3,0],[1,-.3,0],[0,-1,0],[-.78,.28,1],[.78,.28,1]].forEach(([dx,dy,front])=>{
    X.save();X.translate(a,b-44*s);X.rotate(Math.atan2(dy,dx)+sw);
    const fg=X.createLinearGradient(0,0,20*s,0);
-   if(front){fg.addColorStop(0,DK()?'#46B07A':'#5FC48C');fg.addColorStop(1,DK()?'#22764A':'#358F5E')}
-   else{fg.addColorStop(0,DK()?'#2E7E56':'#3E9868');fg.addColorStop(1,DK()?'#175434':'#256B44')}
+   if(front){fg.addColorStop(0,sat('#5FC48C'));fg.addColorStop(1,sat('#358F5E'))}
+   else{fg.addColorStop(0,sat('#3E9868'));fg.addColorStop(1,sat('#256B44'))}
    X.fillStyle=fg;X.beginPath();X.ellipse(15*s,0,15*s,4.2*s,0,0,7);X.fill();X.restore()});
-  X.fillStyle=DK()?'#C98A3C':'#D9963C';
+  X.fillStyle=sat('#D9963C');
   X.beginPath();X.arc(a,b-38*s,2.6*s,0,7);X.fill()})};
 
 DRAW.garden=(x,y,n)=>{const k=Math.min(Math.round(n*40/DCAP),40);
  plot('garden',k,8,22,19).forEach(({wx,wy})=>{
   const a=IX(wx,wy),b=IY(wx,wy);
-  X.strokeStyle=DK()?'#1E5C3A':'#2E7A4A';X.lineWidth=1.8;
+  X.strokeStyle=sat('#2E7A4A');X.lineWidth=1.8;
   X.beginPath();X.moveTo(a,b);X.lineTo(a,b-5);X.stroke();
-  canopy(a,b-11,7.2,DK()?'#5FBF87':'#84D9A4',DK()?'#215F3E':'#357F52')})};
+  canopy(a,b-11,7.2,sat('#84D9A4'),sat('#357F52'))})};
 
 /* ════ المسجد — أساس القرية ════
    ليس مربوطًا بسنّة: هو مركز الأرض، ويتطوّر بمرتبة الطالب لا بعدد أيامه.
@@ -901,8 +960,8 @@ DRAW.dome=(x,y,lv)=>{
  gl.addColorStop(1,'rgba(255,233,168,0)');
  X.fillStyle=gl;X.beginPath();X.arc(px,gy,(90+L*10)*s,0,7);X.fill();X.restore();
 
- const T=DK()?'#DCCDA0':'#FBF4E0',R=DK()?'#BAAB80':'#E6DABC',Lf=DK()?'#8E8058':'#C2B490';
- isoBox(cx,cy,SX,SY,PH,DK()?'#C8BA92':'#EEE5CC',DK()?'#A89A74':'#D6CAAC',DK()?'#847858':'#B4A88C');
+ const T=sat('#FBF4E0'),R=sat('#E6DABC'),Lf=sat('#C2B490');
+ isoBox(cx,cy,SX,SY,PH,sat('#EEE5CC'),sat('#D6CAAC'),sat('#B4A88C'));
  isoBox(cx,cy,HW,HD,HH,T,R,Lf,PH);
 
  /* قناطر الوجه — واحدة في الأصغر، وثلاثٌ فأكثر مع الكبر */
@@ -911,7 +970,7 @@ DRAW.dome=(x,y,lv)=>{
   const u=arch===1?0:(i/(arch-1)-.5)*2;
   const wx=cx+u*HW*.62,bx=IX(wx,cy+HD),by=IY(wx,cy+HD)-PH;
   const aw=HW*(arch===1?.34:.17),ah=HH*.74;
-  X.fillStyle=DK()?'#0E1E19':'#2E4C3B';
+  X.fillStyle=sat('#2E4C3B');
   X.beginPath();X.moveTo(bx-aw,by);X.lineTo(bx-aw,by-ah*.5);
   X.quadraticCurveTo(bx,by-ah,bx+aw,by-ah*.5);X.lineTo(bx+aw,by);X.closePath();X.fill();
   edge(1.1);
@@ -983,13 +1042,13 @@ DRAW.nur=(x,y,n)=>{if(!n)return;
  gl.addColorStop(0,'#FFF0BE');gl.addColorStop(.5,'rgba(255,232,168,.3)');
  gl.addColorStop(1,'rgba(255,240,190,0)');
  X.fillStyle=gl;X.beginPath();X.arc(px,py-26*s,64*s,0,7);X.fill();X.restore();
- const T=DK()?'#D6C79C':'#F5EEDA',R=DK()?'#B4A57B':'#DED2B4',L2=DK()?'#887A54':'#BAAC8A';
+ const T=sat('#F5EEDA'),R=sat('#DED2B4'),L2=sat('#BAAC8A');
  isoBox(cx,cy,15*s,10*s,4*s,T,R,L2);
  /* أربعة أعمدة */
  [[-1,-1],[1,-1],[-1,1],[1,1]].forEach(([dx,dy])=>
   isoBox(cx+dx*11*s,cy+dy*7*s,2*s,2*s,17*s,T,R,L2,4*s));
  const NY=py-4*s-17*s, RR=13*s;
- X.fillStyle=sat(DK()?'#B8922E':'#C9A54A');
+ X.fillStyle=sat(sat('#C9A54A'));
  X.beginPath();X.ellipse(px,NY,RR*1.05,RR*.26,0,0,7);X.fill();edge(1.1);
  const dg=X.createRadialGradient(px-RR*.35,NY-RR*.6,2,px,NY,RR*1.2);
  dg.addColorStop(0,'#FFF6DA');dg.addColorStop(.55,sat('#EBD48A'));
@@ -1008,29 +1067,29 @@ DRAW.nur=(x,y,n)=>{if(!n)return;
  X.closePath();X.fill();X.restore()};
 
 DRAW.sundial=(x,y,n)=>{if(!n)return;shadow(x,y,14,5);
- X.fillStyle=lit(x,y,26,DK()?'#B8AA88':'#DCD2B4',DK()?'#7E735A':'#A89A78');
+ X.fillStyle=lit(x,y,26,sat('#DCD2B4'),sat('#A89A78'));
  X.beginPath();X.ellipse(x,y-3,14,6,0,0,7);X.fill();
- X.fillStyle=DK()?'#8E8262':'#C4B894';X.fillRect(x-12,y-6,24,4);
- X.fillStyle=DK()?'#D4B570':'#B99442';X.beginPath();
+ X.fillStyle=sat('#C4B894');X.fillRect(x-12,y-6,24,4);
+ X.fillStyle=sat('#B99442');X.beginPath();
  X.moveTo(x,y-6);X.lineTo(x+3,y-20);X.lineTo(x+6,y-6);X.fill()};
 
 DRAW.gate=(x,y,n)=>{if(!n)return;const s=.7+Math.min(n,DCAP)/DCAP*.5;
  const [gx,gy]=SPOT.gate,w=24*s,dep=13*s,h=48*s;
  isoBox(gx,gy,w,dep,h,
-  DK()?'#E4D0A0':'#F6ECD6',DK()?'#C2AD80':'#DED0AE',DK()?'#9C8A63':'#C0AE8C');
+  sat('#F6ECD6'),sat('#DED0AE'),sat('#C0AE8C'));
  const bx=IX(gx,gy+dep),by=IY(gx,gy+dep),o=13*s;
- X.fillStyle=DK()?'#0C231E':'#3E5E4A';
+ X.fillStyle=sat('#3E5E4A');
  X.beginPath();X.moveTo(bx-o,by);X.lineTo(bx-o,by-h*.52);
  X.quadraticCurveTo(bx,by-h*.94,bx+o,by-h*.52);X.lineTo(bx+o,by);X.closePath();X.fill();
- X.strokeStyle=DK()?'#D4B570':'#B99442';X.lineWidth=2;X.stroke();
+ X.strokeStyle=sat('#B99442');X.lineWidth=2;X.stroke();
  /* شرفة تعلو البوابة */
- isoBox(gx,gy,w*1.08,dep*1.08,5*s,DK()?'#EFDCAC':'#FBF3E2',
-  DK()?'#C2AD80':'#DED0AE',DK()?'#9C8A63':'#C0AE8C',h)};
+ isoBox(gx,gy,w*1.08,dep*1.08,5*s,sat('#FBF3E2'),
+  sat('#DED0AE'),sat('#C0AE8C'),h)};
 
 DRAW.pattern=(x,y,n)=>{if(!n)return;const k=Math.min(n,DCAP);
- X.fillStyle=DK()?'rgba(212,181,112,.15)':'rgba(185,148,66,.12)';
- X.fillRect(x-70,y-14,140,14);
- X.strokeStyle=DK()?'#D4B570':'#B99442';X.lineWidth=1.4;
+ X.globalAlpha=.13;X.fillStyle=sat('#B99442');
+ X.fillRect(x-70,y-14,140,14);X.globalAlpha=1;
+ X.strokeStyle=sat('#B99442');X.lineWidth=1.4;
  for(let i=0;i<Math.min(k,10);i++){const a=x-63+i*14;X.beginPath();
   X.moveTo(a,y-7);X.lineTo(a+6,y-13);X.lineTo(a+12,y-7);X.lineTo(a+6,y-1);X.closePath();X.stroke()}};
 
@@ -1039,17 +1098,17 @@ DRAW.fountain=(x,y,n)=>{const k=Math.min(Math.ceil(n*8/DCAP),8);
   const a=IX(wx,wy),b=IY(wx,wy);
   shadow(a,b,20,7);
   /* الحوض يستلقي على الأرض فهو بيضويّ مضغوط بميلها */
-  X.fillStyle=DK()?'#4E625C':'#93A197';
+  X.fillStyle=sat('#93A197');
   X.beginPath();X.ellipse(a,b+1,21,21*IZ,-.42,0,7);X.fill();
-  X.fillStyle=DK()?'#8E9E96':'#CBD5CA';
+  X.fillStyle=sat('#CBD5CA');
   X.beginPath();X.ellipse(a,b-2,20,20*IZ,-.42,0,7);X.fill();
   const wg=X.createRadialGradient(a-5,b-5,1,a,b-3,16);
-  wg.addColorStop(0,DK()?'#7FD0EE':'#A8E4F8');wg.addColorStop(1,DK()?'#256B8E':'#3E8FBE');
+  wg.addColorStop(0,sat('#A8E4F8'));wg.addColorStop(1,sat('#3E8FBE'));
   X.fillStyle=wg;X.beginPath();X.ellipse(a,b-3,15,15*IZ,-.42,0,7);X.fill();
   for(let m=0;m<2;m++){const rr=4+((ph*20+m*10)%15);
    X.strokeStyle=`rgba(220,245,255,${(1-rr/19)*.5})`;X.lineWidth=1.1;
    X.beginPath();X.ellipse(a,b-3,rr,rr*IZ*.7,-.42,0,7);X.stroke()}
-  trunk(a,b-4,3.4,20,DK()?'#9EAEA6':'#DAE2D9',DK()?'#5E6E66':'#A6B2A6');
+  trunk(a,b-4,3.4,20,sat('#DAE2D9'),sat('#A6B2A6'));
   X.strokeStyle='rgba(220,245,255,.85)';X.lineWidth=2;
   [-1,1].forEach(d=>{X.beginPath();X.moveTo(a,b-25);
    X.quadraticCurveTo(a+d*11,b-33,a+d*15,b-14);X.stroke()})})};
@@ -1058,33 +1117,33 @@ DRAW.arak=(x,y,n)=>{const k=Math.min(Math.ceil(n*10/DCAP),10);
  plot('arak',k,5,34,28).forEach(({wx,wy})=>{
   const a=IX(wx,wy),b=IY(wx,wy),s=.78+Math.min(n,DCAP)/DCAP*.3;
   shadow(a,b,10,3.6);
-  trunk(a,b,3.2*s,19*s,DK()?'#7E5A38':'#A87C4E',DK()?'#4A3220':'#6B4A2A');
-  canopy(a-7.5*s,b-21*s,8.4*s,DK()?'#3E9E6E':'#5CBE86',DK()?'#1A5C38':'#2C7A4C');
-  canopy(a+7.5*s,b-21*s,8.4*s,DK()?'#3E9E6E':'#5CBE86',DK()?'#1A5C38':'#2C7A4C');
-  canopy(a,b-27*s,12*s,DK()?'#4FB37C':'#6FD49A',DK()?'#1E6B42':'#338354')})};
+  trunk(a,b,3.2*s,19*s,sat('#A87C4E'),sat('#6B4A2A'));
+  canopy(a-7.5*s,b-21*s,8.4*s,sat('#5CBE86'),sat('#2C7A4C'));
+  canopy(a+7.5*s,b-21*s,8.4*s,sat('#5CBE86'),sat('#2C7A4C'));
+  canopy(a,b-27*s,12*s,sat('#6FD49A'),sat('#338354'))})};
 
 DRAW.bighouse=(x,y,n)=>{if(!n)return;const s=.62+Math.min(n,DCAP)/DCAP*.45;
  const [bx,by]=SPOT.bighouse;
- const col={wallTop:DK()?'#D8C99C':'#F8F0DC',wallR:DK()?'#BFAF84':'#E8DCC0',
-            wallL:DK()?'#96865F':'#CCBC9A',
-            roofBack:DK()?'#8E6438':'#B98A52',roofFront:DK()?'#C08A50':'#DBA968',
-            gable:DK()?'#7E5A32':'#A87B47'};
+ const col={wallTop:sat('#F8F0DC'),wallR:sat('#E8DCC0'),
+            wallL:sat('#CCBC9A'),
+            roofBack:sat('#B98A52'),roofFront:sat('#DBA968'),
+            gable:sat('#A87B47')};
  isoHouse(bx,by,32*s,26*s,34*s,22*s,col);
  const fx=IX(bx,by+26*s),fy=IY(bx,by+26*s);
- X.fillStyle=DK()?'#5E4530':'#7A5A3A';X.fillRect(fx-8*s,fy-24*s,16*s,23*s);
+ X.fillStyle=sat('#7A5A3A');X.fillRect(fx-8*s,fy-24*s,16*s,23*s);
  X.fillStyle='#FFEBAE';
  X.fillRect(fx-26*s,fy-28*s,9*s,8*s);X.fillRect(fx+17*s,fy-28*s,9*s,8*s)};
 
 DRAW.bridge=(x,y,n)=>{if(!n)return;const s=.7+Math.min(n,DCAP)/DCAP*.4;
  shadow(x,y+6,38*s,7*s,.14);
  const g=X.createLinearGradient(0,y-26*s,0,y);
- g.addColorStop(0,DK()?'#A0764C':'#C89A5E');g.addColorStop(1,DK()?'#6B4A2A':'#8A6440');
+ g.addColorStop(0,sat('#C89A5E'));g.addColorStop(1,sat('#8A6440'));
  X.strokeStyle=g;X.lineWidth=8*s;X.lineCap='round';
  X.beginPath();X.moveTo(x-44*s,y);X.quadraticCurveTo(x,y-30*s,x+44*s,y);X.stroke();
- X.strokeStyle=DK()?'#7E5A38':'#9E7448';X.lineWidth=3*s;
+ X.strokeStyle=sat('#9E7448');X.lineWidth=3*s;
  for(let i=-4;i<=4;i++){const a=x+i*11*s,dy=Math.abs(i)*1.6*s;
   X.beginPath();X.moveTo(a,y-22*s+dy);X.lineTo(a,y-6*s+dy*.5);X.stroke()}
- X.strokeStyle=DK()?'#A0764C':'#C89A5E';X.lineWidth=2.2*s;
+ X.strokeStyle=sat('#C89A5E');X.lineWidth=2.2*s;
  X.beginPath();X.moveTo(x-44*s,y-13*s);X.quadraticCurveTo(x,y-42*s,x+44*s,y-13*s);X.stroke()};
 
 DRAW.tent=(x,y,n)=>{const k=Math.min(Math.ceil(n*8/DCAP),8);
@@ -1097,12 +1156,12 @@ DRAW.tent=(x,y,n)=>{const k=Math.min(Math.ceil(n*8/DCAP),8);
   const E1=[IX(wx+19,wy-11),IY(wx+19,wy-11)];
   const f=(pts,c)=>{X.fillStyle=c;X.beginPath();
    pts.forEach((q,i)=>i?X.lineTo(q[0],q[1]):X.moveTo(q[0],q[1]));X.closePath();X.fill()};
-  f([E1,S1,apex],DK()?'#8E7028':'#A78B52');
-  f([S1,W1,apex],DK()?'#E5CF9A':'#E4D19C');
+  f([E1,S1,apex],sat('#A78B52'));
+  f([S1,W1,apex],sat('#E4D19C'));
   X.strokeStyle='rgba(0,0,0,.16)';X.lineWidth=1;
   X.beginPath();X.moveTo(S1[0],S1[1]);X.lineTo(apex[0],apex[1]);X.stroke();
   const dx=IX(wx,wy+11),dy=IY(wx,wy+11);
-  X.fillStyle=DK()?'#0C231E':'#4E3A22';X.beginPath();X.moveTo(dx-5,dy);
+  X.fillStyle=sat('#4E3A22');X.beginPath();X.moveTo(dx-5,dy);
   X.lineTo(dx-3,dy-15);X.lineTo(dx+3,dy-15);X.lineTo(dx+5,dy);X.closePath();X.fill()})};
 
 DRAW.flower=(x,y,n)=>{const FCL=['#E8657F','#F2C14E','#B87FD0','#6FD08C','#F28E4E','#5DADE2'];
@@ -1111,7 +1170,7 @@ DRAW.flower=(x,y,n)=>{const FCL=['#E8657F','#F2C14E','#B87FD0','#6FD08C','#F28E4
   const a=IX(wx,wy),b=IY(wx,wy);
   X.fillStyle='rgba(12,32,24,.14)';
   X.beginPath();X.ellipse(a,b+1,4.5,4.5*IZ,0,0,7);X.fill();
-  X.strokeStyle=DK()?'#2E8A58':'#3A8A50';X.lineWidth=1.5;
+  X.strokeStyle=sat('#3A8A50');X.lineWidth=1.5;
   const sw=Math.sin(ph+i)*1.4;
   X.beginPath();X.moveTo(a,b);X.lineTo(a+sw,b-10);X.stroke();
   const fx2=a+sw,c=FCL[i%6];
@@ -1127,26 +1186,26 @@ DRAW.path=(x,y,n)=>{const k=Math.min(n,DCAP);
   const a=IX(wx,wy),b=IY(wx,wy);
   X.fillStyle='rgba(12,32,24,.13)';
   X.beginPath();X.ellipse(a,b+2,7.5,7.5*IZ,-.42,0,7);X.fill();
-  X.fillStyle=lit(a,b,14,DK()?'#5E7068':'#EBE1C6',DK()?'#3A4A44':'#C6BA9C');
+  X.fillStyle=lit(a,b,14,sat('#EBE1C6'),sat('#C6BA9C'));
   X.beginPath();X.ellipse(a,b,7,7*IZ,-.42+Math.sin(i)*.2,0,7);X.fill()})};
 
 DRAW.fruit=(x,y,n)=>{const k=Math.min(Math.ceil(n*8/DCAP),8);
  plot('fruit',k,4,44,32).forEach(({wx,wy})=>{
   const a=IX(wx,wy),b=IY(wx,wy),s=.72+Math.min(n,DCAP)/DCAP*.32;
   shadow(a,b,12,4.4);
-  trunk(a,b,4*s,20*s,DK()?'#7E5A38':'#A87C4E',DK()?'#4A3220':'#6B4A2A');
-  canopy(a-9*s,b-23*s,10*s,DK()?'#3E9E6E':'#5CBE86',DK()?'#1A5C38':'#2C7A4C');
-  canopy(a+9*s,b-23*s,10*s,DK()?'#3E9E6E':'#5CBE86',DK()?'#1A5C38':'#2C7A4C');
-  canopy(a,b-30*s,14*s,DK()?'#4FB37C':'#6FD49A',DK()?'#1E6B42':'#338354');
+  trunk(a,b,4*s,20*s,sat('#A87C4E'),sat('#6B4A2A'));
+  canopy(a-9*s,b-23*s,10*s,sat('#5CBE86'),sat('#2C7A4C'));
+  canopy(a+9*s,b-23*s,10*s,sat('#5CBE86'),sat('#2C7A4C'));
+  canopy(a,b-30*s,14*s,sat('#6FD49A'),sat('#338354'));
   [[-8,-32],[7,-28],[0,-24],[-3,-35]].forEach(([px,q])=>{
    X.fillStyle='#E0566E';X.beginPath();X.arc(a+px*s,b+q*s,3*s,0,7);X.fill();
    X.fillStyle='rgba(255,255,255,.4)';X.beginPath();X.arc(a+px*s-1,b+q*s-1,1,0,7);X.fill()})})};
 
 DRAW.spring=(x,y,n)=>{if(!n)return;const s=.62+Math.min(n,DCAP)/DCAP*.42;shadow(x,y,24*s,7*s,.14);
- X.fillStyle=lit(x,y,52*s,DK()?'#7E948C':'#B4C4BC',DK()?'#43605A':'#84968C');
+ X.fillStyle=lit(x,y,52*s,sat('#B4C4BC'),sat('#84968C'));
  X.beginPath();X.ellipse(x,y,26*s,10*s,0,0,7);X.fill();
  const g=X.createRadialGradient(x-6*s,y-4,2,x,y-2,20*s);
- g.addColorStop(0,DK()?'#8FDCF5':'#B8ECFC');g.addColorStop(1,DK()?'#2E7A9E':'#4E9EC4');
+ g.addColorStop(0,sat('#B8ECFC'));g.addColorStop(1,sat('#4E9EC4'));
  X.fillStyle=g;X.beginPath();X.ellipse(x,y-2,20*s,7.5*s,0,0,7);X.fill();
  for(let k=0;k<3;k++){const rr=(4+((ph*16+k*11)%18))*s;
   X.strokeStyle=`rgba(230,250,255,${(1-rr/(23*s))*.55})`;X.lineWidth=1.1;
@@ -1156,26 +1215,26 @@ DRAW.lamp=(x,y,n)=>{const k=Math.min(n,DCAP);
  plot('lamp',k,10,22,24,false,-10,26).forEach(({wx,wy,i})=>{
   const a=IX(wx,wy),b=IY(wx,wy);
   shadow(a,b,5,2);
-  trunk(a,b,2.6,27,DK()?'#8E A49C'.replace(' ',''):'#B4C0B8',DK()?'#3A4A44':'#7E8C84');
+  trunk(a,b,2.6,27,sat('#B4C0B8'),sat('#7E8C84'));
   X.save();X.globalAlpha=.26+Math.sin(ph*1.5+i)*.1;
   const g=X.createRadialGradient(a,b-32,0,a,b-32,26);
   g.addColorStop(0,'#FFE9A8');g.addColorStop(1,'rgba(255,233,168,0)');
   X.fillStyle=g;X.beginPath();X.arc(a,b-32,26,0,7);X.fill();X.restore();
-  X.fillStyle=DK()?'#8E7028':'#A08442';X.beginPath();
+  X.fillStyle=sat('#A08442');X.beginPath();
   X.moveTo(a-6,b-29);X.lineTo(a+6,b-29);X.lineTo(a+4,b-37);X.lineTo(a-4,b-37);X.closePath();X.fill();
   X.fillStyle='#FFF3C4';X.beginPath();X.arc(a,b-33,3.8,0,7);X.fill()})};
 
 DRAW.well=(x,y,n)=>{if(!n)return;const s=.62+Math.min(n,DCAP)/DCAP*.4;shadow(x,y,18*s,5*s);
- X.fillStyle=lit(x,y,40*s,DK()?'#8E9E96':'#C4CEC4',DK()?'#4E625C':'#8E9C92');
+ X.fillStyle=lit(x,y,40*s,sat('#C4CEC4'),sat('#8E9C92'));
  X.fillRect(x-20*s,y-19*s,40*s,19*s);
  for(let r=0;r<2;r++)for(let c=0;c<4;c++){X.strokeStyle='rgba(0,0,0,.13)';X.lineWidth=1;
   X.strokeRect(x-20*s+c*10*s+(r%2?5*s:0),y-19*s+r*9.5*s,10*s,9.5*s)}
- X.fillStyle=DK()?'#08201C':'#2E4A3E';X.beginPath();X.ellipse(x,y-19*s,20*s,5.6*s,0,0,7);X.fill();
- X.fillStyle=DK()?'#3E90BF':'#5FAEC9';X.beginPath();X.ellipse(x,y-18*s,15*s,4*s,0,0,7);X.fill();
- X.strokeStyle=DK()?'#A0764C':'#C89A5E';X.lineWidth=4*s;
+ X.fillStyle=sat('#2E4A3E');X.beginPath();X.ellipse(x,y-19*s,20*s,5.6*s,0,0,7);X.fill();
+ X.fillStyle=sat('#5FAEC9');X.beginPath();X.ellipse(x,y-18*s,15*s,4*s,0,0,7);X.fill();
+ X.strokeStyle=sat('#C89A5E');X.lineWidth=4*s;
  X.beginPath();X.moveTo(x-15*s,y-19*s);X.lineTo(x-15*s,y-38*s);
  X.lineTo(x+15*s,y-38*s);X.lineTo(x+15*s,y-19*s);X.stroke();
- X.strokeStyle=DK()?'#5E4530':'#7A5A3A';X.lineWidth=2.4*s;
+ X.strokeStyle=sat('#7A5A3A');X.lineWidth=2.4*s;
  X.beginPath();X.moveTo(x-15*s,y-38*s);X.lineTo(x,y-46*s);X.lineTo(x+15*s,y-38*s);X.stroke()};
 
 DRAW.crescent=(x,y,n)=>{if(!n)return;const s=.55+Math.min(n,DCAP)/DCAP*.6;X.save();
@@ -1193,15 +1252,15 @@ DRAW.crescent=(x,y,n)=>{if(!n)return;const s=.55+Math.min(n,DCAP)/DCAP*.6;X.save
 DRAW.shieldL=(x,y,n)=>{if(!n)return;const s=.6+Math.min(n,DCAP)/DCAP*.55;X.save();
  X.globalAlpha=(.2+Math.min(n,DCAP)/DCAP*.2)+Math.sin(ph)*.07;
  const g=X.createLinearGradient(x,y-40*s,x,y+10*s);
- g.addColorStop(0,DK()?'#8FD3C8':'#6BBFB2');g.addColorStop(1,'rgba(107,191,178,.08)');
+ g.addColorStop(0,sat('#6BBFB2'));g.addColorStop(1,'rgba(107,191,178,.08)');
  X.fillStyle=g;X.beginPath();X.moveTo(x,y-42*s);X.lineTo(x+24*s,y-30*s);X.lineTo(x+24*s,y-11*s);
  X.quadraticCurveTo(x,y+9*s,x-24*s,y-11*s);X.lineTo(x-24*s,y-30*s);X.closePath();X.fill();
- X.globalAlpha=.55;X.strokeStyle=DK()?'#A8E4DA':'#8FD3C8';X.lineWidth=2.2;X.stroke();X.restore()};
+ X.globalAlpha=.55;X.strokeStyle=sat('#8FD3C8');X.lineWidth=2.2;X.stroke();X.restore()};
 
 /* سياج النور: يحيط بالبستان داخل السور */
 DRAW.fence=(x,y,n)=>{if(!n)return;const k=Math.min(n,DCAP);X.save();
  X.globalAlpha=.22+Math.min(k,30)/30*.18+Math.sin(ph*1.2)*.06;
- X.strokeStyle=DK()?'#8FD3C8':'#6BBFB2';X.lineWidth=2.4;X.lineCap='round';
+ X.strokeStyle=sat('#6BBFB2');X.lineWidth=2.4;X.lineCap='round';
  const raw=[],x0=IN.x+8,y0=IN.y+8,x1=IN.x+IN.w-8,y1=IN.y+IN.h-8;
  for(let i=0;i<10;i++)raw.push([x0+(x1-x0)*i/9,y0]);
  for(let i=1;i<6;i++)raw.push([x1,y0+(y1-y0)*i/5]);
@@ -1283,26 +1342,25 @@ const SORTED = ["minaret","gate","mihrab","sundial","house","nur","rug","bridge"
    حجر كلسيّ فاتح ومداميك أغمق منه قليلًا — الأبلق في العمارة تباينٌ في
    المداميك لا رقعة شطرنج. والرخام للبحرة وحافّات القنوات.               */
 const PAL = {
-  light: { sand:"#CFCCC0", sandDot:"#B4B1A4",
-           stone:"#F0E4C4", band:"#DCC79E", joint:"rgba(116,90,50,.22)",
-           edge:"rgba(96,74,42,.42)",
-           marble:"#FBF5E4", water:"#5FD0F5", waterD:"#2E96D4",
-           curb:"#E8D9AE", curbSh:"rgba(78,60,34,.28)",
-           bedIn:"#5FC45E", bedTx:"rgba(28,96,48,.10)", gold:"#E8B22C" },
-  dark:  { sand:"#0A1815", sandDot:"#1A2E28",
-           stone:"#42433C", band:"#383931", joint:"rgba(0,0,0,.26)",
-           edge:"rgba(0,0,0,.42)",
-           marble:"#565749", water:"#4E93B0", waterD:"#2E6B8E",
-           curb:"#4A4B41", curbSh:"rgba(0,0,0,.34)",
-           bedIn:"#1B453B", bedTx:"rgba(0,0,0,.10)", gold:"#D4B570" },
+  sand:"#CFCCC0", sandDot:"#B4B1A4",
+  stone:"#F0E4C4", band:"#DCC79E", joint:"rgba(116,90,50,.22)",
+  edge:"rgba(96,74,42,.42)",
+  marble:"#FBF5E4", water:"#5FD0F5", waterD:"#2E96D4",
+  curb:"#E8D9AE", curbSh:"rgba(78,60,34,.28)",
+  bedIn:"#5FC45E", bedTx:"rgba(28,96,48,.10)", gold:"#E8B22C",
 };
-const RAWPAL = () => (DK() ? PAL.dark : PAL.light);
-const PALC = { calm: null, game: null, k: null };
+/* ما لا لونَ له — الفواصل والظلال — يزداد عتمةً بالليل ولا يُشتقّ */
+const PAL_DK = { joint:"rgba(0,0,0,.30)", edge:"rgba(0,0,0,.46)",
+                 curbSh:"rgba(0,0,0,.38)", bedTx:"rgba(0,0,0,.14)" };
+const PALC = { k: null, v: null };
 const pal = () => {
   const key = DK() ? "d" : "l";
   if (PALC.k === key) return PALC.v;
-  const raw = RAWPAL(), out = {};
-  Object.keys(raw).forEach((n) => (out[n] = sat(raw[n])));
+  const dk = key === "d", out = {};
+  Object.keys(PAL).forEach((n) => {
+    const v = PAL[n];
+    out[n] = dk && PAL_DK[n] ? PAL_DK[n] : sat(v);
+  });
   PALC.k = key; PALC.v = out;
   return out;
 };
@@ -1597,20 +1655,6 @@ function perkStars() {
       X.moveTo(a, b - r * 3); X.lineTo(a, b + r * 3); X.stroke();
     }
   }
-  /* شهابان يعبران بين حينٍ وآخر */
-  for (let k = 0; k < 2; k++) {
-    const cyc = (ph * .18 + k * .5) % 2.2;
-    if (cyc > 1) continue;
-    const t = cyc;
-    const sx = 120 + k * 520 + t * 300, sy = 40 + k * 90 + t * 150;
-    X.globalAlpha = Math.sin(Math.PI * t) * .95;
-    const sg = X.createLinearGradient(sx - 66, sy - 34, sx, sy);
-    sg.addColorStop(0, "rgba(255,255,255,0)"); sg.addColorStop(1, "#FFFFFF");
-    X.strokeStyle = sg; X.lineWidth = 2.4; X.lineCap = "round";
-    X.beginPath(); X.moveTo(sx - 66, sy - 34); X.lineTo(sx, sy); X.stroke();
-    X.fillStyle = "#FFFFFF";
-    X.beginPath(); X.arc(sx, sy, 2.2, 0, 7); X.fill();
-  }
   X.restore();
 }
 
@@ -1639,7 +1683,7 @@ function perkLanterns() {
     X.restore();
     shadow(px, py, 4, 2, .18);
     /* العمود وذراعه */
-    X.strokeStyle = DK() ? "#2E3A34" : "#5A5244"; X.lineWidth = 2.6; X.lineCap = "round";
+    X.strokeStyle = sat("#5A5244"); X.lineWidth = 2.6; X.lineCap = "round";
     X.beginPath(); X.moveTo(px, py); X.lineTo(px, py - 26); X.stroke();
     X.lineWidth = 2; X.beginPath();
     X.moveTo(px, py - 26); X.quadraticCurveTo(px + 4, py - 31, px + 7, py - 30); X.stroke();
@@ -1650,7 +1694,7 @@ function perkLanterns() {
     X.fillStyle = g2; X.beginPath(); X.arc(px + 7, py - 24, 20, 0, 7); X.fill(); X.restore();
     /* الجسم الزجاجيّ */
     const bx = px + 7, by = py - 24;
-    X.fillStyle = sat(DK() ? "#8E7A44" : "#B99442");
+    X.fillStyle = sat(sat("#B99442"));
     X.beginPath(); X.ellipse(bx, by - 7.5, 3.6, 1.6, 0, 0, 7); X.fill();
     const gg = X.createLinearGradient(bx, by - 7, bx, by + 6);
     gg.addColorStop(0, "#FFF3C8"); gg.addColorStop(.5, "#FFD473"); gg.addColorStop(1, "#F0A93A");
@@ -1659,7 +1703,7 @@ function perkLanterns() {
     X.moveTo(bx - 3.4, by - 6); X.lineTo(bx + 3.4, by - 6);
     X.lineTo(bx + 2.4, by + 5.5); X.lineTo(bx - 2.4, by + 5.5);
     X.closePath(); X.fill(); edge(1);
-    X.fillStyle = sat(DK() ? "#8E7A44" : "#B99442");
+    X.fillStyle = sat(sat("#B99442"));
     X.beginPath(); X.ellipse(bx, by + 6, 2.8, 1.3, 0, 0, 7); X.fill();
     /* شعلةٌ في القلب */
     X.globalAlpha = fl; X.fillStyle = "#FFFBE6";
@@ -1667,65 +1711,107 @@ function perkLanterns() {
   });
 }
 
-/* نافورة في البحرة: عمودٌ صاعد وأقواسٌ جانبية وقطراتٌ وحلقاتٌ تتّسع */
-function perkJet() {
-  const px = IX(762, 420), py = IY(762, 420);
+/* مشاعل الصحن: عمودٌ حديديّ في قِدرٍ من نار — النار تتراقص بثلاث ألسنة
+   بأطوارٍ مختلفة، فلا تنبض كتلةً واحدة. وتطوف الصحن كلّه لا زاويةً منه. */
+function perkTorch() {
+  const P0 = [];
+  /* أركان التقاطع الأربعة — قلب الصحن */
+  [[452, 337], [618, 337], [452, 503], [618, 503]].forEach((q) => P0.push(q));
+  /* وعلى المحورين، متباعدةً حتى أطراف الرواق */
+  for (let i = 0; i < 3; i++) {
+    P0.push([180 + i * 132, 366], [700 + i * 132, 366]);
+    P0.push([180 + i * 132, 474], [700 + i * 132, 474]);
+  }
   X.save();
-  /* حوضٌ رخاميّ على مجرى القناة — البحرة حُذفت، فللنافورة حوضُها */
-  const p2 = pal();
-  X.fillStyle = "rgba(20,35,30,.16)";
-  X.beginPath(); X.ellipse(px + 1, py + 3, 30, 30 * IZ * .62, 0, 0, 7); X.fill();
-  X.fillStyle = p2.marble;
-  X.beginPath(); X.ellipse(px, py, 28, 28 * IZ * .62, 0, 0, 7); X.fill(); edge(1.2);
-  const wg = X.createRadialGradient(px - 6, py - 4, 2, px, py, 22);
-  wg.addColorStop(0, p2.water); wg.addColorStop(1, p2.waterD);
-  X.fillStyle = wg;
-  X.beginPath(); X.ellipse(px, py, 21, 21 * IZ * .62, 0, 0, 7); X.fill();
-  /* حلقات على سطح الماء */
-  for (let r = 0; r < 4; r++) {
-    const t = ((ph * .5 + r / 4) % 1);
-    X.globalAlpha = (1 - t) * .42;
-    X.strokeStyle = "#EAF8FF"; X.lineWidth = 2.2 - t * 1.4;
+  P0.sort((a, b) => (a[0] + a[1]) - (b[0] + b[1])).forEach(([wx, wy], i) => {
+    const px = IX(wx, wy), py = IY(wx, wy);
+    const fl = .74 + Math.sin(ph * 3.1 + i * 1.9) * .26;
+    /* بِركة ضوءٍ على الأرض تتنفّس مع اللهب */
+    X.save(); X.globalAlpha = fl * .40;
+    const lg = X.createRadialGradient(px, py, 1, px, py, 54);
+    lg.addColorStop(0, "#FFB25A"); lg.addColorStop(1, "rgba(255,178,90,0)");
+    X.fillStyle = lg;
+    X.beginPath(); X.ellipse(px, py, 54, 54 * IZ * .62, 0, 0, 7); X.fill();
+    X.restore();
+    shadow(px, py, 7, 3.2, .22);
+    /* العمود */
+    X.strokeStyle = sat("#4A4436"); X.lineWidth = 4.6; X.lineCap = "round";
+    X.beginPath(); X.moveTo(px, py); X.lineTo(px, py - 42); X.stroke();
+    /* القِدر */
+    X.fillStyle = sat("#6E6552");
     X.beginPath();
-    X.ellipse(px, py + 2, 6 + t * 30, (6 + t * 30) * IZ * .55, 0, 0, 7);
-    X.stroke();
+    X.moveTo(px - 12, py - 42); X.lineTo(px + 12, py - 42);
+    X.lineTo(px + 8, py - 30); X.lineTo(px - 8, py - 30);
+    X.closePath(); X.fill(); edge(1.1);
+    X.fillStyle = sat("#B99442");
+    X.beginPath(); X.ellipse(px, py - 42, 12, 4.4, 0, 0, 7); X.fill(); edge(1.2);
+    /* جمرٌ في القِدر */
+    X.globalAlpha = fl;
+    X.fillStyle = "#FF7A2A";
+    X.beginPath(); X.ellipse(px, py - 42, 9, 3.2, 0, 0, 7); X.fill();
+    /* ثلاث ألسنة بأطوارٍ مختلفة */
+    const tongue = (dx, hh, w, c1, c2, ps) => {
+      const f = .8 + Math.sin(ph * 4.3 + ps + i) * .2;
+      const g = X.createLinearGradient(px, py - 44, px, py - 44 - hh * f);
+      g.addColorStop(0, c1); g.addColorStop(1, c2);
+      X.fillStyle = g; X.globalAlpha = .92;
+      X.beginPath();
+      X.moveTo(px + dx - w, py - 44);
+      X.quadraticCurveTo(px + dx - w * .5, py - 44 - hh * f * .6,
+                         px + dx + Math.sin(ph * 3 + ps) * 2.4, py - 44 - hh * f);
+      X.quadraticCurveTo(px + dx + w * .5, py - 44 - hh * f * .6, px + dx + w, py - 44);
+      X.closePath(); X.fill();
+    };
+    tongue(-5, 24, 5.4, "#F2571E", "rgba(242,87,30,0)", 0);
+    tongue(5, 27, 5.4, "#FF8A24", "rgba(255,138,36,0)", 2.1);
+    tongue(0, 38, 7, "#FFC24A", "rgba(255,194,74,0)", 4.2);
+    tongue(0, 19, 3.6, "#FFF3C0", "rgba(255,243,192,0)", 1.1);
+    /* شررٌ يصعد */
+    X.fillStyle = "#FFD98A";
+    for (let k = 0; k < 3; k++) {
+      const t = ((ph * .9 + k / 3 + i * .21) % 1);
+      X.globalAlpha = (1 - t) * .8;
+      X.beginPath();
+      X.arc(px + Math.sin(ph * 2 + k * 2 + i) * 9 * t, py - 48 - t * 44, 2.2 - t, 0, 7);
+      X.fill();
+    }
+    X.globalAlpha = 1;
+  });
+  X.restore();
+}
+
+/* وابل الشُّهب: خمسةٌ تعبر بأطوارٍ متتابعة، لكلٍّ ذَنَبٌ يخفت خلفه،
+   وواحدٌ منها يتوهّج عند ذروته — وابلٌ لا شهابٌ يتيم. */
+function perkMeteor() {
+  X.save();
+  for (let k = 0; k < 5; k++) {
+    const cyc = (ph * .22 + k * .41) % 2.6;
+    if (cyc > 1) continue;
+    const t = cyc, big = k === 2;
+    const x0 = -90 + RN(k + 31) * W * .95, y0 = -40 + RN(k + 47) * H * .3;
+    const len = 190 + RN(k + 13) * 150, dy = len * .52;
+    const sx = x0 + t * len, sy = y0 + t * dy;
+    const a = Math.sin(Math.PI * t);
+    const tail = big ? 108 : 74, wdt = big ? 3.4 : 2.2;
+    X.globalAlpha = a * .95;
+    const sg = X.createLinearGradient(sx - tail, sy - tail * .52, sx, sy);
+    sg.addColorStop(0, "rgba(255,255,255,0)");
+    sg.addColorStop(.6, big ? "rgba(255,226,150,.55)" : "rgba(220,236,255,.45)");
+    sg.addColorStop(1, "#FFFFFF");
+    X.strokeStyle = sg; X.lineWidth = wdt; X.lineCap = "round";
+    X.beginPath(); X.moveTo(sx - tail, sy - tail * .52); X.lineTo(sx, sy); X.stroke();
+    /* الرأس وهالته */
+    X.globalAlpha = a;
+    const hg = X.createRadialGradient(sx, sy, 0, sx, sy, big ? 16 : 9);
+    hg.addColorStop(0, "#FFFFFF");
+    hg.addColorStop(.4, big ? "rgba(255,224,150,.75)" : "rgba(210,232,255,.6)");
+    hg.addColorStop(1, "rgba(255,255,255,0)");
+    X.fillStyle = hg;
+    X.beginPath(); X.arc(sx, sy, big ? 16 : 9, 0, 7); X.fill();
+    X.fillStyle = "#FFFFFF";
+    X.beginPath(); X.arc(sx, sy, big ? 3 : 2, 0, 7); X.fill();
   }
-  /* توهّجٌ عند القاعدة */
-  X.globalAlpha = .3 + Math.sin(ph * 2) * .08;
-  const bg = X.createRadialGradient(px, py, 1, px, py, 26);
-  bg.addColorStop(0, "rgba(190,235,255,.7)"); bg.addColorStop(1, "rgba(190,235,255,0)");
-  X.fillStyle = bg; X.beginPath(); X.ellipse(px, py, 26, 26 * IZ * .6, 0, 0, 7); X.fill();
-  /* العمود الصاعد */
-  X.globalAlpha = .85;
-  const cg = X.createLinearGradient(0, py - 46, 0, py);
-  cg.addColorStop(0, "rgba(235,250,255,0)"); cg.addColorStop(.45, "rgba(215,243,255,.9)");
-  cg.addColorStop(1, "rgba(150,215,245,.95)");
-  X.fillStyle = cg;
-  X.beginPath();
-  X.moveTo(px - 2.6, py); X.quadraticCurveTo(px - 4.4, py - 30, px, py - 46);
-  X.quadraticCurveTo(px + 4.4, py - 30, px + 2.6, py); X.closePath(); X.fill();
-  /* أقواسٌ تتناثر من القمّة */
-  X.strokeStyle = "rgba(226,246,255,.8)"; X.lineCap = "round";
-  for (let i = 0; i < 8; i++) {
-    const a2 = i * Math.PI / 4 + ph * .25;
-    const dx = Math.cos(a2) * 22, dy = Math.sin(a2) * 22 * IZ * .8;
-    const t = ((ph * .8 + i / 8) % 1);
-    X.globalAlpha = (1 - t) * .8; X.lineWidth = 2.2 - t;
-    X.beginPath();
-    X.moveTo(px, py - 46);
-    X.quadraticCurveTo(px + dx * .6, py - 50 - t * 4, px + dx * t, py - 46 + dy * t + t * t * 34);
-    X.stroke();
-  }
-  /* رذاذ */
-  X.fillStyle = "rgba(240,252,255,.9)";
-  for (let i = 0; i < 10; i++) {
-    const t = ((ph * .9 + i * .17) % 1);
-    const a2 = i * 2.2;
-    X.globalAlpha = (1 - t) * .75;
-    X.beginPath();
-    X.arc(px + Math.cos(a2) * 26 * t, py - 46 + Math.sin(a2) * 8 + t * t * 44, 1.8 - t, 0, 7);
-    X.fill();
-  }
+  X.globalAlpha = 1;
   X.restore();
 }
 
@@ -1738,7 +1824,7 @@ function perkBanners() {
   P0.forEach(([wx, wy], i) => {
     const px = IX(wx, wy), py = IY(wx, wy);
     shadow(px, py, 3, 1.6, .14);
-    X.strokeStyle = DK() ? "#3A4640" : "#6E6552"; X.lineWidth = 2.2; X.lineCap = "round";
+    X.strokeStyle = sat("#6E6552"); X.lineWidth = 2.2; X.lineCap = "round";
     X.beginPath(); X.moveTo(px, py); X.lineTo(px, py - 30); X.stroke();
     /* القماش يتموّج بجيبٍ يتأخّر بطول الراية */
     const w = Math.sin(ph * 2.4 + i * .8);
@@ -1752,7 +1838,7 @@ function perkBanners() {
     X.quadraticCurveTo(px + 7 + w * 3, py - 27.5 + w * 2, px + 14 + w * 4, py - 25);
     X.lineTo(px + 13 + w * 4, py - 23); X.quadraticCurveTo(px + 6 + w * 2, py - 25, px, py - 27);
     X.closePath(); X.fill();
-    X.fillStyle = sat(DK() ? "#C9A54A" : "#D8B45E");
+    X.fillStyle = sat(sat("#D8B45E"));
     X.beginPath(); X.arc(px, py - 31.5, 2.4, 0, 7); X.fill(); edge(.9);
   });
   X.restore();
@@ -1835,9 +1921,11 @@ function perkBirds() {
   X.restore();
 }
 
-function perksBack()  { if (PERKON.stars) perkStars(); if (PERKON.lantern) perkLanterns(); }
-function perksFront() { if (PERKON.jet) perkJet(); if (PERKON.flag) perkBanners();
-                        if (PERKON.blossom) perkBlossom(); if (PERKON.birds) perkBirds(); }
+function perksBack()  { if (PERKON.stars) perkStars(); if (PERKON.lantern) perkLanterns();
+                        if (PERKON.torch) perkTorch(); }
+function perksFront() { if (PERKON.flag) perkBanners();
+                        if (PERKON.blossom) perkBlossom(); if (PERKON.birds) perkBirds();
+                        if (PERKON.meteor) perkMeteor(); }
 
 /* الأرض ثابتة لا تتغيّر — تُرسم مرّة واحدة لكل ثيم وتُنسخ كصورة كل إطار.
    بدونها نُعيد ٧٢٠ عملية رسم ستّين مرّة في الثانية على الجوال.          */
@@ -2040,7 +2128,7 @@ export function Village({ st, theme = "light" }) {
       view.current = { cx, cy, vw, vh };
       X.setTransform(ZOOM * d, 0, 0, ZOOM * d, 0, 0);
       X.translate(-(cx - vw / 2), -(cy - vh / 2));
-      X.fillStyle = DK() ? "#0A1815" : "#D8D2C0";
+      X.fillStyle = sat("#D8D2C0");
       X.fillRect(cx - vw / 2, cy - vh / 2, vw, vh);
       X.drawImage(groundLayer(), 0, 0);
       /* ما نما منذ الإطار السابق: يقفز وينفض غبارًا */
@@ -2106,15 +2194,20 @@ export function Village({ st, theme = "light" }) {
         else DRAW[nm](px, py, t[it.k] || 0);
         if (pop) X.restore();
       });
-      /* بريقٌ يتحرّك على ماء الحوض — الأرض مخزّنة صورةً فلا حركة فيها.
-         ولا حوضَ قبل فتح النافورة، فلا بريق قبلها */
-      if (PERKON.jet) {
-        const bg = IX(762, 420), bgy = IY(762, 420);
-        X.globalAlpha = .18 + Math.sin(ph * .9) * .08;
+      /* بريقٌ يجري في ماء القناة — الأرض مخزّنة صورةً فلا حركة فيها،
+         فيُرسم البريق فوقها كل إطار. يمشي شرقًا ثم يعود من أوّلها. */
+      {
+        X.globalAlpha = .22;
         X.fillStyle = "#FFFFFF";
-        X.beginPath();
-        X.ellipse(bg - 8 + Math.sin(ph * .5) * 4, bgy - 3, 10, 10 * IZ * .7, -0.42, 0, 7);
-        X.fill(); X.globalAlpha = 1;
+        for (let k = 0; k < 3; k++) {
+          const u = ((ph * .10 + k / 3) % 1);
+          const wx = 620 + u * 300, wy = 414;
+          const gx = IX(wx, wy), gy = IY(wx, wy);
+          X.globalAlpha = Math.sin(Math.PI * u) * .3;
+          X.beginPath();
+          X.ellipse(gx, gy, 13, 13 * IZ * .5, 0, 0, 7); X.fill();
+        }
+        X.globalAlpha = 1;
       }
 
       const objs = [];
@@ -2157,7 +2250,7 @@ export function Village({ st, theme = "light" }) {
         X.closePath();
         X.fillStyle = "rgba(212,181,112,.14)"; X.fill();
         X.globalAlpha = .55 + Math.sin(ph * 2.2) * .30;
-        X.strokeStyle = DK() ? "#E5CF9A" : "#B99442";
+        X.strokeStyle = sat("#B99442");
         X.lineWidth = 3 / ZOOM; X.lineJoin = "round"; X.stroke();
         /* زوايا مشدودة تزيدها وضوحًا */
         X.globalAlpha = 1; X.lineWidth = 5 / ZOOM; X.lineCap = "round";
@@ -2792,6 +2885,176 @@ const SoundBtn = () => {
 /* ════ مسار البستان ════
    بطاقاتٌ تُمرَّر أفقيًا لا قائمة: المفتوحُ ملوّنٌ يلمع، والمقفلُ باهتٌ بقفله
    وما بقي له. وزرٌّ يعاين كلَّ مرتبةٍ في الأرض قبل بلوغها.               */
+/* ════════ نافذةُ المكافأة ════════
+   لونٌ يتبدّل ليس مكافأة، وأيقونةٌ ساكنة لا تُشوّق. فلكلّ مرتبةٍ نافذةٌ
+   حيّة في بطاقتها: الرايات ترفرف والطير يعبر والنار تتراقص — يراها
+   قبل أن يبلغها، فيسعى إلى شيءٍ رآه لا إلى وصفٍ قرأه.                 */
+const FILM_SKY = {
+  flag:    "linear-gradient(180deg,#BFE6F5,#E8F6E2)",
+  blossom: "linear-gradient(180deg,#CDEBF7,#F2E6F0)",
+  torch:   "linear-gradient(180deg,#2A2036,#4A2A22)",
+  birds:   "linear-gradient(180deg,#9FD8F2,#DCF0F7)",
+  lantern: "linear-gradient(180deg,#1F2C3E,#3A3448)",
+  stars:   "linear-gradient(180deg,#0B1430,#1E2A4E)",
+  meteor:  "linear-gradient(180deg,#080F26,#231A3E)",
+};
+const RND = (i) => ((Math.sin(i * 12.9898) * 43758.5453) % 1 + 1) % 1;
+
+function FilmScene({ k }) {
+  if (k === "flag") {
+    return (
+      <g>
+        <path d="M0 52h120" stroke="#7FB870" strokeWidth="10" strokeLinecap="round" />
+        {[16, 46, 76, 104].map((x, i) => (
+          <g key={x}>
+            <path d={`M${x} 50V18`} stroke="#6E6552" strokeWidth="2.4" strokeLinecap="round" />
+            <path className="fl-wave" style={{ animationDelay: `${i * .22}s`, transformOrigin: `${x}px 20px` }}
+              d={`M${x} 19h17l-4 5 4 5h-17z`} fill={["#E8B62C", "#4BE04B", "#FF7A18", "#1E90FF"][i]}
+              stroke="rgba(0,0,0,.35)" strokeWidth="1.2" strokeLinejoin="round" />
+          </g>
+        ))}
+      </g>
+    );
+  }
+  if (k === "blossom") {
+    return (
+      <g>
+        <path d="M0 54h120" stroke="#7FB870" strokeWidth="12" strokeLinecap="round" />
+        <circle cx="24" cy="34" r="15" fill="#5FB86E" />
+        <circle cx="96" cy="30" r="13" fill="#4EA560" />
+        {Array.from({ length: 9 }, (_, i) => (
+          <ellipse key={i} className="fl-fall" rx="3.4" ry="2.2"
+            cx={10 + i * 13} cy="-6"
+            fill={["#FFB7CE", "#FFD9A0", "#FFF0C4", "#F7A8C4"][i % 4]}
+            style={{ animationDelay: `${(i % 5) * .5 + RND(i) * .4}s`,
+                     animationDuration: `${2.6 + RND(i + 3) * 1.4}s` }} />
+        ))}
+      </g>
+    );
+  }
+  if (k === "torch") {
+    return (
+      <g>
+        <path d="M0 54h120" stroke="#3A2E2A" strokeWidth="12" strokeLinecap="round" />
+        {[30, 60, 90].map((x, i) => (
+          <g key={x}>
+            <circle className="fl-glow" cx={x} cy="30" r="17" fill="#FF9A3C" opacity=".3"
+              style={{ animationDelay: `${i * .3}s` }} />
+            <path d={`M${x} 50V34`} stroke="#4A4436" strokeWidth="3" strokeLinecap="round" />
+            <path d={`M${x - 7} 33h14l-2.6 6h-8.8z`} fill="#8A7A58"
+              stroke="rgba(0,0,0,.4)" strokeWidth="1" strokeLinejoin="round" />
+            <path className="fl-fire" style={{ animationDelay: `${i * .27}s`, transformOrigin: `${x}px 33px` }}
+              d={`M${x} 8c5 9 7 12 7 17a7 7 0 0 1-14 0c0-5 2-8 7-17z`} fill="#FF8A24" />
+            <path className="fl-fire" style={{ animationDelay: `${i * .27 + .16}s`, transformOrigin: `${x}px 33px` }}
+              d={`M${x} 17c2.6 5 3.6 7 3.6 9.6a3.6 3.6 0 0 1-7.2 0c0-2.6 1-4.6 3.6-9.6z`} fill="#FFEBAE" />
+          </g>
+        ))}
+      </g>
+    );
+  }
+  if (k === "birds") {
+    return (
+      <g>
+        <circle cx="98" cy="14" r="9" fill="#FFE9A8" opacity=".85" />
+        <path d="M0 58q26-8 52-3t68-3v12H0z" fill="#7FB870" opacity=".55" />
+        {[[0, 18, 1, 4.4], [1, 32, .82, 5.4], [2, 11, .6, 6.6], [3, 40, .52, 7.4], [4, 25, .92, 5]]
+          .map(([i, y, sc, dur]) => (
+          <g key={i} className="fl-cross"
+             style={{ animationDelay: `${i * 1.1}s`, animationDuration: `${dur}s` }}>
+            <g transform={`translate(0 ${y}) scale(${sc})`}>
+              <g className="fl-flap" style={{ animationDelay: `${i * .19}s` }}>
+                <path d="M-9 0q4.5-6 9 0" stroke="#2A3A34" strokeWidth={2.4 / sc}
+                  fill="none" strokeLinecap="round" />
+                <path d="M0 0q4.5-6 9 0" stroke="#2A3A34" strokeWidth={2.4 / sc}
+                  fill="none" strokeLinecap="round" />
+              </g>
+            </g>
+          </g>
+        ))}
+      </g>
+    );
+  }
+  if (k === "lantern") {
+    return (
+      <g>
+        <path d="M0 56h120" stroke="#2A3444" strokeWidth="10" strokeLinecap="round" />
+        {[26, 60, 94].map((x, i) => (
+          <g key={x} className="fl-swing" style={{ animationDelay: `${i * .5}s`, transformOrigin: `${x}px 6px` }}>
+            <path d={`M${x} 6v10`} stroke="#6E6552" strokeWidth="1.8" strokeLinecap="round" />
+            <circle className="fl-glow" cx={x} cy="30" r="16" fill="#FFD98A" opacity=".34"
+              style={{ animationDelay: `${i * .4}s` }} />
+            <path d={`M${x - 6} 18h12l-2 16h-8z`} fill="#FFD473"
+              stroke="rgba(0,0,0,.4)" strokeWidth="1.2" strokeLinejoin="round" />
+            <ellipse cx={x} cy="17" rx="7" ry="2.2" fill="#C9A54A" />
+            <ellipse cx={x} cy="34" rx="5" ry="2" fill="#C9A54A" />
+            <ellipse className="fl-glow" cx={x} cy="26" rx="2" ry="3.4" fill="#FFFBE6"
+              style={{ animationDelay: `${i * .23}s` }} />
+          </g>
+        ))}
+      </g>
+    );
+  }
+  if (k === "stars") {
+    return (
+      <g>
+        {Array.from({ length: 26 }, (_, i) => (
+          <circle key={i} className="fl-twinkle"
+            cx={4 + RND(i) * 112} cy={3 + RND(i + 40) * 46}
+            r={.9 + RND(i + 9) * 1.8}
+            fill={i % 6 === 0 ? "#CFE0FF" : i % 4 === 0 ? "#FFE7C0" : "#FFFAE8"}
+            style={{ animationDelay: `${RND(i + 5) * 2.4}s` }} />
+        ))}
+        <path d="M0 60q30-10 60-4t60-2v10H0z" fill="#0A1424" />
+      </g>
+    );
+  }
+  if (k === "meteor") {
+    return (
+      <g>
+        {Array.from({ length: 16 }, (_, i) => (
+          <circle key={i} cx={4 + RND(i) * 112} cy={3 + RND(i + 40) * 44}
+            r={.8 + RND(i + 9) * 1.2} fill="#FFFAE8" opacity=".7" />
+        ))}
+        {[0, 1, 2].map((i) => (
+          <g key={i} className="fl-shoot" style={{ animationDelay: `${i * 1.1}s` }}>
+            <path d={`M-34 ${6 + i * 15}L0 ${24 + i * 15}`} stroke={`url(#tail${i})`}
+              strokeWidth={i === 1 ? 3 : 2} strokeLinecap="round" />
+            <circle cx="0" cy={24 + i * 15} r={i === 1 ? 2.6 : 1.8} fill="#FFF" />
+          </g>
+        ))}
+        <path d="M0 60q30-10 60-4t60-2v10H0z" fill="#0A1424" />
+      </g>
+    );
+  }
+  /* مرتبةٌ بلا مكافأة — لقبٌ يلمع */
+  return (
+    <g>
+      <circle className="fl-glow" cx="60" cy="30" r="20" fill="#FFD426" opacity=".28" />
+      <path d="m60 14 5.6 11.4 12.6 1.8-9.1 8.9 2.1 12.5L60 42.7 48.8 48.6l2.1-12.5-9.1-8.9 12.6-1.8z"
+        fill="#FFD426" stroke="rgba(0,0,0,.35)" strokeWidth="1.6" strokeLinejoin="round" />
+    </g>
+  );
+}
+
+function PerkFilm({ k, locked }) {
+  return (
+    <div style={{ ...S.tkFilm, background: FILM_SKY[k] || "linear-gradient(180deg,#33406A,#5A4A7A)" }}>
+      <svg viewBox="0 0 120 64" style={{ width: "100%", height: "100%", display: "block",
+                                         opacity: locked ? .82 : 1 }}>
+        <defs>
+          {[0, 1, 2].map((i) => (
+            <linearGradient key={i} id={"tail" + i} x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stopColor="#FFFFFF" stopOpacity="0" />
+              <stop offset="1" stopColor="#FFFFFF" stopOpacity=".95" />
+            </linearGradient>
+          ))}
+        </defs>
+        <FilmScene k={k} />
+      </svg>
+    </div>
+  );
+}
+
 function Track({ gems, onClose, onPreview, previewing }) {
   useTiers();
   const here = tierAt(gems).i;
@@ -2848,21 +3111,8 @@ function Track({ gems, onClose, onPreview, previewing }) {
               </div>
               {now && <div style={{ ...S.tkNow, color: t.c }}>أنت هنا</div>}
 
-              <div style={{ ...S.tkIc,
-                            background: got ? "rgba(255,255,255,.22)" : t.c + "1A",
-                            borderColor: got ? "rgba(255,255,255,.45)" : t.c + "55" }}>
-                {perk ? (
-                  <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round"
-                    strokeLinejoin="round"
-                    style={{ width: 28, height: 28, stroke: got ? "#fff" : t.c, opacity: got ? 1 : .8 }}
-                    dangerouslySetInnerHTML={{ __html: svg(perk.ic) }} />
-                ) : (
-                  <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round"
-                    strokeLinejoin="round"
-                    style={{ width: 25, height: 25, stroke: got ? "#fff" : t.c, opacity: got ? 1 : .8 }}>
-                    <path d="m12 3 2.6 5.3 5.9.8-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8L3.5 9.1l5.9-.8z" />
-                  </svg>
-                )}
+              <div style={{ ...S.tkWin, borderColor: got ? "rgba(255,255,255,.5)" : t.c + "66" }}>
+                <PerkFilm k={t.r} locked={!got} />
                 {!got && (
                   <div style={{ ...S.tkLock, background: t.c, borderColor: "var(--sp-surf)" }}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6"
@@ -3537,8 +3787,38 @@ function Styles() {
         pointer-events:none}
       @keyframes spShine{0%{inset-inline-start:-45%}
                          55%,100%{inset-inline-start:115%}}
+      /* مَشاهد النوافذ الحيّة في بطاقات المسار */
+      .fl-wave{animation:flWave 1.5s ease-in-out infinite}
+      @keyframes flWave{0%,100%{transform:scaleX(1) skewY(0deg)}
+                        50%{transform:scaleX(.84) skewY(-7deg)}}
+      .fl-fall{animation:flFall 3.2s linear infinite}
+      @keyframes flFall{0%{transform:translate(0,0) rotate(0);opacity:0}
+                        12%{opacity:1}
+                        88%{opacity:1}
+                        100%{transform:translate(-22px,74px) rotate(260deg);opacity:0}}
+      .fl-fire{animation:flFire .7s ease-in-out infinite}
+      @keyframes flFire{0%,100%{transform:scale(1)}
+                        50%{transform:scale(.9,1.24)}}
+      .fl-glow{animation:flGlow 1.6s ease-in-out infinite}
+      @keyframes flGlow{0%,100%{opacity:.24}50%{opacity:.62}}
+      .fl-swing{animation:flSwing 2.6s ease-in-out infinite}
+      @keyframes flSwing{0%,100%{transform:rotate(-7deg)}50%{transform:rotate(7deg)}}
+      .fl-twinkle{animation:flTwinkle 2.2s ease-in-out infinite}
+      @keyframes flTwinkle{0%,100%{opacity:.22}50%{opacity:1}}
+      .fl-cross{animation:flCross 5s linear infinite}
+      @keyframes flCross{0%{transform:translateX(-26px)}100%{transform:translateX(148px)}}
+      .fl-flap{animation:flFlap .42s ease-in-out infinite;
+               transform-box:fill-box;transform-origin:center}
+      @keyframes flFlap{0%,100%{transform:scaleY(1)}50%{transform:scaleY(.28)}}
+      .fl-shoot{animation:flShoot 3.3s linear infinite}
+      @keyframes flShoot{0%{transform:translate(0,0);opacity:0}
+                         8%{opacity:1}
+                         52%{transform:translate(152px,64px);opacity:0}
+                         100%{transform:translate(152px,64px);opacity:0}}
       @media (prefers-reduced-motion:reduce){
         .sp-tap,.sp-pop,.sp-tile,.sp-shine::after{transition:none;animation:none}
+        .fl-wave,.fl-fall,.fl-fire,.fl-glow,.fl-swing,.fl-twinkle,
+        .fl-cross,.fl-flap,.fl-shoot{animation:none}
       }
     `}</style>
   );
@@ -3591,10 +3871,11 @@ const S = {
              display: "flex", alignItems: "center", justifyContent: "center" },
   tkNow: { position: "absolute", top: 10, insetInlineStart: 9, fontSize: 8.5,
            fontWeight: 700, background: "#fff", borderRadius: 6, padding: "2px 6px" },
-  tkIc: { position: "relative", width: 62, height: 62, borderRadius: 20, marginTop: 12,
-          borderWidth: 1.5, borderStyle: "solid",
-          display: "flex", alignItems: "center", justifyContent: "center" },
-  tkLock: { position: "absolute", bottom: -3, insetInlineEnd: -3, width: 21, height: 21,
+  tkWin: { position: "relative", width: 112, height: 62, borderRadius: 13, marginTop: 14,
+           borderWidth: 1.5, borderStyle: "solid", overflow: "hidden",
+           boxShadow: "inset 0 2px 8px rgba(0,0,0,.22)" },
+  tkFilm: { width: "100%", height: "100%", overflow: "hidden" },
+  tkLock: { position: "absolute", bottom: 4, insetInlineEnd: 4, width: 18, height: 18,
             borderRadius: "50%", borderWidth: 2, borderStyle: "solid",
             display: "flex", alignItems: "center", justifyContent: "center" },
   tkName: { fontSize: 11.5, fontWeight: 700, lineHeight: 1.35, minHeight: 30 },
