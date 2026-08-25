@@ -648,7 +648,7 @@ export const gLabel = (d) => `الموافق ${ar(d.getDate())} ${GM[d.getMonth(
    تتراكم طوال السنة.                                                       */
 export const MONTHLY = true;
 
-export function useSillaState(initialLog = {}, onPersistDay) {
+export function useSillaState(initialLog = {}, onPersistDay, gemsFromServer) {
   const sv = useSunanVersion();          /* أي تعديل على السنن يعيد حساب ما تحته */
   const [log, setLog] = useState(initialLog);
   /* الحفظ إلى الخادم: المكوّن يقول «هذا اليوم تغيّر» ولا يزيد. أما متى
@@ -706,8 +706,12 @@ export function useSillaState(initialLog = {}, onPersistDay) {
   }, [log, sv]);
 
   const monthGems = useMemo(() => days.reduce((a, d) => a + dayGems(iso(d)), 0), [days, dayGems]);
-  const allGems = useMemo(
+  /* الجواهر الكلّية: **من الخادم** إن رُكّب البرنامج على خادم — فالإدارة
+     تطّلع عليها ولا يصحّ أن يكون مصدرُها رقمًا يرسله المتصفّح. وبلا خادمٍ
+     تُحسب هنا كما كانت. (وجواهرُ اليوم والشهر مجاميعُ عرضٍ من السجلّ نفسه.) */
+  const localGems = useMemo(
     () => Object.keys(log).reduce((a, k) => a + dayGems(k), 0), [log, dayGems]);
+  const allGems = typeof gemsFromServer === "number" ? gemsFromServer : localGems;
 
   /* كم يومًا اكتملت فيه كل سنّة، حتى يوم معيّن من الشهر المعروض.
      upto = ترتيب اليوم داخل الشهر (١ فأكثر) · preview = الحالة المثالية */
@@ -4038,12 +4042,12 @@ function Tour({ tab, setTab, onDone, onCta, onStep }) {
 }
 
 export default function SillaBustan({ theme = "light", initialLog = {}, editable = true,
-                                      onPersistDay, local = true }) {
+                                      onPersistDay, local = true, gems }) {
   /* على الموقع تأتي السنن والمراتب من قاعدة البيانات، فلا تُقرأ من المتصفّح:
      `local = false` يمنع القراءة من localStorage حتى لا تطغى نسخةُ متصفّحٍ
      قديمة على ما اعتمده الأدمن للجميع. */
   useEffect(() => { if (local) { hydrateSunan(); hydrateTiers(); } hydrateSound(); }, [local]);
-  const st = useSillaState(initialLog, onPersistDay);
+  const st = useSillaState(initialLog, onPersistDay, gems);
   const [tab, setTab] = useState("village");
   /* الجولة تُعرض مرّةً واحدة — تُقرأ بعد التركيب لا قبله (§١٤) */
   const [tour, setTour] = useState(false);
