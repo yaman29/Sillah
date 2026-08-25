@@ -651,20 +651,18 @@ export const MONTHLY = true;
 export function useSillaState(initialLog = {}, onPersistDay) {
   const sv = useSunanVersion();          /* أي تعديل على السنن يعيد حساب ما تحته */
   const [log, setLog] = useState(initialLog);
-  /* الحفظ إلى الخادم: يُؤخَّر قليلًا فلا تُرسل ضغطةُ العدّاد الخمس مرّات
-     خمسَ طلبات. والمفتاح يومٌ واحد، فيُرسل اليوم كلّه لا الفرق. */
-  const saveRef = useRef({ t: 0, keys: new Set() });
+  /* الحفظ إلى الخادم: المكوّن يقول «هذا اليوم تغيّر» ولا يزيد. أما متى
+     يُرسل وكم مرّة يُعاد فسياسةُ شبكةٍ تخصّ من ركّبه — يضعها في
+     `onPersistDay`. وهكذا يبقى المكوّن صالحًا بلا خادمٍ أصلًا. */
+  const saveRef = useRef(new Set());
   useEffect(() => {
     if (!onPersistDay) return;
-    const s2 = saveRef.current;
-    if (!s2.keys.size) return;
-    const t = setTimeout(() => {
-      const keys = [...s2.keys]; s2.keys.clear();
-      keys.forEach((k) => onPersistDay(k, log[k] || {}));
-    }, 700);
-    return () => clearTimeout(t);
+    const q = saveRef.current;
+    if (!q.size) return;
+    const keys = [...q]; q.clear();
+    keys.forEach((k) => onPersistDay(k, log[k] || {}));
   }, [log, onPersistDay]);
-  const touch = (k) => { if (onPersistDay) saveRef.current.keys.add(k); };
+  const touch = (k) => { if (onPersistDay) saveRef.current.add(k); };
   const [start, setStart] = useState(() => monthStart(today()));   // بداية الشهر المعروض
   const [dayKey, setDayKey] = useState(() => iso(today()));        // اليوم المفتوح للتعبئة
 
@@ -2121,6 +2119,19 @@ function drawPlayer(src, px, py) {
    ════════════════════════════════════════════════════════════════════ */
 const LS_RANK = "silla.rank.v1";
 
+/* آخر مرتبةٍ رآها الطالب — في المتصفّح افتراضًا. وعلى الموقع تُحقن من
+   حسابه بـ `setRankStore`، فلا تتكرّر نافذةُ الاحتفاء على كل جهاز. */
+let RANKIO = {
+  get: () => {
+    try { return parseInt(window.localStorage.getItem(LS_RANK), 10); }
+    catch (e) { return NaN; }
+  },
+  set: (i) => {
+    try { window.localStorage.setItem(LS_RANK, String(i)); } catch (e) { /* تجاهل */ }
+  },
+};
+export function setRankStore(io) { RANKIO = io; }
+
 export function Village({ st, theme = "light", intent, clearIntent, onTour, showcase }) {
   useSunanVersion();
   useTiers();
@@ -2189,11 +2200,10 @@ export function Village({ st, theme = "light", intent, clearIntent, onTour, show
   const [rankUp, setRankUp] = useState(null);
   const [track, setTrack] = useState(false);
   useEffect(() => {
-    let seen = -1;
-    try { seen = parseInt(window.localStorage.getItem(LS_RANK), 10); } catch (e) { /* تجاهل */ }
+    let seen = RANKIO.get();
     if (!Number.isFinite(seen)) seen = -1;
     if (rank.i > seen) {
-      try { window.localStorage.setItem(LS_RANK, String(rank.i)); } catch (e) { /* تجاهل */ }
+      RANKIO.set(rank.i);
       if (seen >= 0) { setRankUp(rank.cur); SFX.rank(); }
     }
   }, [rank.i]);
@@ -3906,6 +3916,8 @@ export function SillaAdmin({ theme = "light" }) {
    تُعرض مرّةً واحدة ويُحفظ ذلك في `silla.tour.v1`، ولها زرٌّ في الرأس
    يعيدها لمن أرادها.                                                   */
 export const LS_TOUR = "silla.tour.v1";
+
+
 
 const TOUR = [
   { tab: "village", at: null, ic: "heart",
