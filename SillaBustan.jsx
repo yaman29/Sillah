@@ -482,7 +482,7 @@ export let TIERS = DEFAULT_TIERS.map((t) => ({ ...t }));
 let tierVer = 0;
 const tierSubs = new Set();
 export const defaultTiers = () => DEFAULT_TIERS.map((t) => ({ ...t }));
-export function setTiers(list) {
+export function setTiers(list, { persist = true } = {}) {
   TIERS = (Array.isArray(list) ? list : [])
     .filter((t) => t && t.id)
     .map((t) => ({ id:String(t.id), n:String(t.n||""), g:Math.max(0,Math.round(+t.g||0)),
@@ -491,6 +491,7 @@ export function setTiers(list) {
     .sort((a, b) => a.g - b.g);
   if (!TIERS.length) TIERS = defaultTiers();
   tierVer++; tierSubs.forEach((f) => f());
+  if (!persist) return;
   try { window.localStorage.setItem(LS_TIERS, JSON.stringify(TIERS)); } catch (e) { /* تجاهل */ }
 }
 export function resetTiers() {
@@ -647,9 +648,23 @@ export const gLabel = (d) => `الموافق ${ar(d.getDate())} ${GM[d.getMonth(
    تتراكم طوال السنة.                                                       */
 export const MONTHLY = true;
 
-export function useSillaState(initialLog = {}) {
+export function useSillaState(initialLog = {}, onPersistDay) {
   const sv = useSunanVersion();          /* أي تعديل على السنن يعيد حساب ما تحته */
   const [log, setLog] = useState(initialLog);
+  /* الحفظ إلى الخادم: يُؤخَّر قليلًا فلا تُرسل ضغطةُ العدّاد الخمس مرّات
+     خمسَ طلبات. والمفتاح يومٌ واحد، فيُرسل اليوم كلّه لا الفرق. */
+  const saveRef = useRef({ t: 0, keys: new Set() });
+  useEffect(() => {
+    if (!onPersistDay) return;
+    const s2 = saveRef.current;
+    if (!s2.keys.size) return;
+    const t = setTimeout(() => {
+      const keys = [...s2.keys]; s2.keys.clear();
+      keys.forEach((k) => onPersistDay(k, log[k] || {}));
+    }, 700);
+    return () => clearTimeout(t);
+  }, [log, onPersistDay]);
+  const touch = (k) => { if (onPersistDay) saveRef.current.keys.add(k); };
   const [start, setStart] = useState(() => monthStart(today()));   // بداية الشهر المعروض
   const [dayKey, setDayKey] = useState(() => iso(today()));        // اليوم المفتوح للتعبئة
 
@@ -672,11 +687,13 @@ export function useSillaState(initialLog = {}) {
       if (nowDone && !wasDone) SFX.done();
       else if (!nowDone && wasDone) SFX.undo();
       else SFX.step();
+      touch(dayKey);
       return { ...L, [dayKey]: d };
     });
   }, [dayKey, sv]);
 
   const setTime = useCallback((k, v) => {
+    touch(dayKey);
     setLog((L) => ({ ...L, [dayKey]: { ...(L[dayKey] || {}), [k]: Math.max(0, parseInt(v) || 0) } }));
   }, [dayKey]);
 
@@ -4008,9 +4025,13 @@ function Tour({ tab, setTab, onDone, onCta, onStep }) {
   );
 }
 
-export default function SillaBustan({ theme = "light", initialLog = {}, editable = true }) {
-  useEffect(() => { hydrateSunan(); hydrateSound(); hydrateTiers(); }, []);
-  const st = useSillaState(initialLog);
+export default function SillaBustan({ theme = "light", initialLog = {}, editable = true,
+                                      onPersistDay, local = true }) {
+  /* على الموقع تأتي السنن والمراتب من قاعدة البيانات، فلا تُقرأ من المتصفّح:
+     `local = false` يمنع القراءة من localStorage حتى لا تطغى نسخةُ متصفّحٍ
+     قديمة على ما اعتمده الأدمن للجميع. */
+  useEffect(() => { if (local) { hydrateSunan(); hydrateTiers(); } hydrateSound(); }, [local]);
+  const st = useSillaState(initialLog, onPersistDay);
   const [tab, setTab] = useState("village");
   /* الجولة تُعرض مرّةً واحدة — تُقرأ بعد التركيب لا قبله (§١٤) */
   const [tour, setTour] = useState(false);
