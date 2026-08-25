@@ -2190,17 +2190,11 @@ export function Village({ st, theme = "light", intent, clearIntent, onTour, show
 
   /* المرتبة: تلوّن حدّ الأرض، ويُحتفى ببلوغ عتبةٍ جديدة */
   const rank = tierAt(allGems);
-  /* معاينة مرتبة: الأرض ومكافآتها كما تكون عند بلوغها */
-  const [tierPv, setTierPv] = useState(null);
-  const pvT = tierPv != null ? TIERS[Math.min(tierPv, TIERS.length - 1)] : null;
-  TIERC = (pvT || rank.cur).c;
-  PERKON = perksAt(pvT ? pvT.g : allGems);
-  MLV = tierPv != null ? tierPv : rank.i;      /* مستوى المسجد = ترتيب المرتبة */
-  const stepTier = (d) => {
-    const base = tierPv == null ? rank.i : tierPv;
-    const n = Math.max(0, Math.min(TIERS.length - 1, base + d));
-    SFX.rank(); setTierPv(n);
-  };
+  /* ⛔ لا معاينةَ للمراتب: المكافأة تُفتح ببلوغها لا باستعراضها.
+     كانت أداةَ عرضٍ للتصميم — وقد أدّت غرضها. */
+  TIERC = rank.cur.c;
+  PERKON = perksAt(allGems);
+  MLV = rank.i;                                /* مستوى المسجد = ترتيب المرتبة */
   const [rankUp, setRankUp] = useState(null);
   const [track, setTrack] = useState(false);
   useEffect(() => {
@@ -2214,8 +2208,8 @@ export function Village({ st, theme = "light", intent, clearIntent, onTour, show
   /* المعاينة تُظهر الأرض عامرةً، وإلا لم يُرَ أثر المكافأة على أرضٍ خالية */
   /* أثناء شرح «كل سنّةٍ تبني شيئًا» يُعرض البستان عامرًا — فالكلام عن
      البناء أمام أرضٍ خالية لا يُقنع أحدًا. */
-  const builds = useMemo(() => tally(viewDay, showcase || tierPv != null),
-                         [tally, viewDay, showcase, tierPv]);
+  const builds = useMemo(() => tally(viewDay, showcase),
+                         [tally, viewDay, showcase]);
   const bRef = useRef(builds);
   useEffect(() => { bRef.current = builds; }, [builds]);
 
@@ -2563,33 +2557,8 @@ export function Village({ st, theme = "light", intent, clearIntent, onTour, show
         <button style={S.trackB} onClick={() => { SFX.open(); setTrack(true); }}>المسار</button>
       </div>
 
-      {/* شريط المعاينة — أداة عرضٍ للتصميم، تُحذف عند الاعتماد */}
-      {pvT && (
-        <div style={{ ...S.pvBar, borderColor: pvT.c }}>
-          <button style={S.pvNav} disabled={tierPv <= 0}
-            onClick={() => stepTier(-1)} aria-label="المرتبة السابقة">
-            <Chevron dir="right" />
-          </button>
-          <div style={{ flex: 1, minWidth: 0, textAlign: "center" }}>
-            <div style={{ fontSize: 12.5, fontWeight: 700, color: pvT.c }}>
-              معاينة: {pvT.n}
-            </div>
-            <div style={S.lbl}>
-              {pvT.r ? PERKS[pvT.r].n : `لقب «${pvT.n}»`} · {fmt(pvT.g)} جوهرة
-            </div>
-          </div>
-          <button style={S.pvNav} disabled={tierPv >= TIERS.length - 1}
-            onClick={() => stepTier(1)} aria-label="المرتبة التالية">
-            <Chevron dir="left" />
-          </button>
-          <button style={S.pvX} onClick={() => { SFX.nav(); setTierPv(null); }}>إنهاء</button>
-        </div>
-      )}
-
       {track && (
-        <Track gems={allGems} previewing={tierPv}
-          onClose={() => setTrack(false)}
-          onPreview={(i) => { SFX.rank(); setTierPv(i); setTrack(false); }} />
+        <Track gems={allGems} onClose={() => setTrack(false)} />
       )}
 
       {/* شريط الشهر — البستان يتبدّل بتبدّله */}
@@ -2661,18 +2630,7 @@ export function Village({ st, theme = "light", intent, clearIntent, onTour, show
             <div style={S.zh}>{near.n}</div>
           </div>
         )}
-        {rankUp && (
-          <Overlay onClose={() => setRankUp(null)} z={95}>
-            <div style={{ textAlign: "center" }}>
-              <div style={S.lbl}>ترقّى بستانك</div>
-              <div style={{ ...S.rankBig, color: rankUp.c }}>{rankUp.n}</div>
-              <div style={{ ...S.rankRing, borderColor: rankUp.c }} />
-              <div style={S.dlgH}>{rankUp.d}</div>
-              <button style={{ ...S.dlgX, background: rankUp.c }}
-                onClick={() => setRankUp(null)}>الحمد لله</button>
-            </div>
-          </Overlay>
-        )}
+        {rankUp && <RankUp tier={rankUp} onClose={() => setRankUp(null)} />}
         {tapped && (
           <div data-card style={S.card}
             onClick={() => { setTapped(null); selRef.current = null; }}>
@@ -3264,7 +3222,65 @@ function PerkFilm({ k, locked }) {
   );
 }
 
-function Track({ gems, onClose, onPreview, previewing }) {
+/* ════════ احتفاءُ بلوغ المرتبة ════════
+   المكافأة تُفتح ببلوغها، فاللحظةُ نفسها هي الجائزة. شاشةٌ كاملة: أشعّةٌ
+   تدور، وقصاصاتٌ تنهمر، ونافذةُ المكافأة **حيّةً** تقفز قفزةً نابية —
+   فيرى ما فُتح له لا اسمًا مكتوبًا. */
+function RankUp({ tier, onClose }) {
+  const perk = tier.r ? PERKS[tier.r] : null;
+  const C = tier.c;
+  /* قصاصاتٌ بمواضعَ وأطوارٍ ثابتة — فلا تتبدّل بين إطارٍ وآخر */
+  const bits = Array.from({ length: 34 }, (_, i) => ({
+    x: 4 + ((i * 37) % 92),
+    d: (i % 7) * .17,
+    t: 1.5 + ((i * 13) % 11) / 10,
+    s: 5 + ((i * 7) % 7),
+    r: (i * 53) % 360,
+    c: ["#FFD426", "#4BE04B", "#FF7A18", "#1E90FF", "#FF3D68", "#A03CFF", C][i % 7],
+  }));
+  return (
+    <div style={S.ruWrap} onClick={onClose}>
+      <div style={S.ruScrim} />
+      {/* أشعّةٌ تدور خلف الجائزة */}
+      <div style={{ ...S.ruRays, background:
+        `repeating-conic-gradient(from 0deg at 50% 50%, ${C}38 0deg 7deg, transparent 7deg 18deg)` }} />
+      {/* القصاصات */}
+      <div style={S.ruBits} aria-hidden="true">
+        {bits.map((b, i) => (
+          <span key={i} className="ru-bit" style={{
+            insetInlineStart: `${b.x}%`, width: b.s, height: b.s * 1.7, background: b.c,
+            animationDelay: `${b.d}s`, animationDuration: `${b.t}s`,
+            transform: `rotate(${b.r}deg)`,
+            borderRadius: i % 3 === 0 ? "50%" : 2 }} />
+        ))}
+      </div>
+
+      <div style={S.ruCard} onClick={(e) => e.stopPropagation()}>
+        <div className="ru-in" style={{ ...S.ruKicker, color: C }}>بلغتَ مرتبةً جديدة</div>
+        <div className="ru-name" style={{ ...S.ruName, color: C }}>{tier.n}</div>
+
+        {/* نافذةُ المكافأة حيّةً — هي ما فُتح له */}
+        <div className="ru-pop" style={{ ...S.ruWin, borderColor: C }}>
+          <PerkFilm k={tier.r} />
+        </div>
+
+        <div className="ru-in" style={{ ...S.ruWhat, animationDelay: ".5s" }}>
+          {perk ? <><span style={{ color: C, fontWeight: 800 }}>فُتح لك:</span> {perk.n}</>
+                : `لقب «${tier.n}»`}
+        </div>
+        <div className="ru-in" style={{ ...S.ruNote, animationDelay: ".62s" }}>
+          {perk ? perk.d : tier.d}
+        </div>
+        <button className="ru-in" onClick={onClose}
+          style={{ ...S.ruBtn, background: C, animationDelay: ".74s" }}>
+          شاهد بستانك
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Track({ gems, onClose }) {
   useTiers();
   const here = tierAt(gems).i;
   const reelRef = useRef(null);
@@ -3303,14 +3319,12 @@ function Track({ gems, onClose, onPreview, previewing }) {
           const now = i === here;
           const perk = t.r ? PERKS[t.r] : null;
           return (
-            <button key={t.id} data-at={i} className={got ? "sp-tile sp-shine" : "sp-tile"}
-              onClick={() => onPreview(i)}
+            <div key={t.id} data-at={i} className={got ? "sp-tile sp-shine" : "sp-tile"}
               style={{ ...S.tkCard,
                 ...(got ? { background: `linear-gradient(160deg, ${t.c}, ${t.c}C0 62%, ${t.c}88)`,
                             borderColor: t.c, boxShadow: `0 6px 18px ${t.c}55` }
                         : { background: `linear-gradient(160deg, ${t.c}26, ${t.c}0E)`,
                             borderColor: t.c + "66" }),
-                ...(previewing === i ? { outline: "3px solid var(--sp-gold)", outlineOffset: 2 } : {}),
                 animationDelay: `${i * 70}ms` }}>
 
               <div style={{ ...S.tkBadge,
@@ -3344,12 +3358,12 @@ function Track({ gems, onClose, onPreview, previewing }) {
                             color: got ? "#fff" : t.c }}>
                 {got ? "مفتوح ✓" : `${fmt(t.g - gems)} 💎`}
               </div>
-            </button>
+            </div>
           );
         })}
       </div>
 
-      <div style={S.tkTip}>اضغط أيّ مرتبة لتعاين أرضك عندها</div>
+      <div style={S.tkTip}>كلّ مرتبةٍ تُفتح وحدها ببلوغ جواهرها</div>
       <button style={S.dlgX} onClick={onClose}>إغلاق</button>
     </Overlay>
   );
@@ -4129,6 +4143,28 @@ function Styles() {
         pointer-events:none}
       @keyframes spShine{0%{inset-inline-start:-45%}
                          55%,100%{inset-inline-start:115%}}
+      /* احتفاءُ بلوغ المرتبة — أشعّةٌ تدور وقصاصاتٌ تنهمر وجائزةٌ تقفز */
+      @keyframes ruSpin{to{transform:rotate(360deg)}}
+      .ru-bit{position:absolute;top:-8%;opacity:0;
+        animation:ruFall linear infinite}
+      @keyframes ruFall{
+        0%{opacity:0;transform:translateY(0) rotate(0)}
+        8%{opacity:1}
+        100%{opacity:0;transform:translateY(112vh) rotate(760deg)}}
+      .ru-pop{animation:ruPop .78s cubic-bezier(.2,1.7,.35,1) both}
+      @keyframes ruPop{
+        0%{opacity:0;transform:scale(.3) rotate(-9deg)}
+        62%{opacity:1;transform:scale(1.09) rotate(2deg)}
+        100%{opacity:1;transform:scale(1) rotate(0)}}
+      .ru-name{animation:ruName .7s cubic-bezier(.2,1.6,.4,1) both}
+      @keyframes ruName{
+        0%{opacity:0;transform:scale(.5)}
+        70%{opacity:1;transform:scale(1.12)}
+        100%{opacity:1;transform:scale(1)}}
+      .ru-in{animation:ruIn .5s cubic-bezier(.2,.9,.3,1) both}
+      @keyframes ruIn{from{opacity:0;transform:translateY(12px)}
+                      to{opacity:1;transform:none}}
+
       /* مَشاهد النوافذ الحيّة في بطاقات المسار */
       .fl-wave{animation:flWave 1.5s ease-in-out infinite}
       @keyframes flWave{0%,100%{transform:scaleX(1) skewY(0deg)}
@@ -4159,7 +4195,10 @@ function Styles() {
       @media (prefers-reduced-motion:reduce){
         .sp-tap,.sp-pop,.sp-tile,.sp-shine::after{transition:none;animation:none}
         .fl-wave,.fl-fall,.fl-glow,.fl-swing,.fl-twinkle,
-        .fl-cross,.fl-flap,.fl-shoot,.fl-sway{animation:none}
+        .fl-cross,.fl-flap,.fl-shoot,.fl-sway,
+        .ru-bit,.ru-pop,.ru-name,.ru-in{animation:none}
+        .ru-bit{display:none}
+        .ru-pop,.ru-name,.ru-in{opacity:1}
       }
     `}</style>
   );
@@ -4223,13 +4262,27 @@ const S = {
   tkTier: { fontSize: 10, fontWeight: 600 },
   tkNeed: { fontSize: 10.5, fontWeight: 700, borderRadius: 8, padding: "4px 10px", marginTop: 2 },
   tkTip: { textAlign: "center", fontSize: 10, color: "var(--sp-mut)", marginTop: 2 },
-  pvBar: { display: "flex", alignItems: "center", gap: 7, marginBottom: 10,
-           background: "var(--sp-surf)", borderWidth: 1.5, borderStyle: "solid",
-           borderRadius: 15, padding: "7px 9px", boxShadow: "var(--sp-sh)" },
-  pvNav: { width: 30, height: 30, flexShrink: 0, borderRadius: 10,
-           borderWidth: 1, borderStyle: "solid", borderColor: "var(--sp-line)",
-           background: "var(--sp-bg)", color: "var(--sp-prim)", padding: 0,
-           display: "flex", alignItems: "center", justifyContent: "center" },
+  /* احتفاءُ بلوغ المرتبة */
+  ruWrap: { position: "fixed", inset: 0, zIndex: 140, display: "flex",
+            alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  ruScrim: { position: "absolute", inset: 0, background: "rgba(8,22,18,.72)" },
+  ruRays: { position: "absolute", width: "220vmax", height: "220vmax",
+            animation: "ruSpin 26s linear infinite", pointerEvents: "none" },
+  ruBits: { position: "absolute", inset: 0, pointerEvents: "none", overflow: "hidden" },
+  ruCard: { position: "relative", width: "min(384px, calc(100vw - 56px))",
+            boxSizing: "border-box", background: "var(--sp-surf)", borderRadius: 24,
+            padding: "22px 20px 18px", textAlign: "center",
+            boxShadow: "0 24px 60px rgba(8,22,18,.5)" },
+  ruKicker: { fontSize: 11.5, fontWeight: 700, letterSpacing: ".02em" },
+  ruName: { fontSize: 34, fontWeight: 800, lineHeight: 1.25, margin: "2px 0 14px" },
+  ruWin: { width: "100%", height: 128, borderRadius: 16, overflow: "hidden",
+           borderWidth: 2, borderStyle: "solid",
+           boxShadow: "inset 0 2px 10px rgba(0,0,0,.24)" },
+  ruWhat: { fontSize: 14, fontWeight: 700, marginTop: 14 },
+  ruNote: { fontSize: 12, lineHeight: 1.8, color: "var(--sp-mut)", marginTop: 5 },
+  ruBtn: { width: "100%", border: "none", borderRadius: 15, padding: "13px 16px",
+           marginTop: 15, fontSize: 14, fontWeight: 800, color: "#fff",
+           fontFamily: "inherit" },
   pvX: { flexShrink: 0, borderRadius: 10, borderWidth: 0, padding: "7px 11px",
          fontSize: 11, fontWeight: 700, color: "#fff", background: "var(--sp-prim)" },
   trackB: { flexShrink: 0, borderWidth: 1, borderStyle: "solid", borderColor: "var(--sp-line)",
