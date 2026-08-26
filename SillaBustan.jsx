@@ -4055,8 +4055,10 @@ function Tour({ tab, setTab, onDone, onCta, onStep }) {
   );
 }
 
+/* تبويبٌ إضافيّ يركّبه من ركّب البرنامج — لوحةُ الترتيب للمشرف مثلًا.
+   `{ id, label, icon, node }` والأيقونةُ مسارُ SVG. */
 export default function SillaBustan({ theme = "light", initialLog = {}, editable = true,
-                                      onPersistDay, local = true, gems }) {
+                                      onPersistDay, local = true, gems, extraTab }) {
   /* على الموقع تأتي السنن والمراتب من قاعدة البيانات، فلا تُقرأ من المتصفّح:
      `local = false` يمنع القراءة من localStorage حتى لا تطغى نسخةُ متصفّحٍ
      قديمة على ما اعتمده الأدمن للجميع. */
@@ -4076,6 +4078,7 @@ export default function SillaBustan({ theme = "light", initialLog = {}, editable
       {tab === "village" && <Village st={st} theme={theme}
         intent={intent} clearIntent={() => setIntent(null)}
         showcase={tourAt === "stage"} onTour={() => setTour(true)} />}
+      {extraTab && tab === extraTab.id && extraTab.node}
       {tab === "rec" && <Recorder st={st} onSave={() => setTab("village")}
         intent={intent} clearIntent={() => setIntent(null)} />}
       {tab === "edit" && <SunanEditor />}
@@ -4090,6 +4093,15 @@ export default function SillaBustan({ theme = "light", initialLog = {}, editable
             <path d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" /></svg>
           التعبئة
         </button>
+        {extraTab && (
+          <button style={{ ...S.tb, ...(tab === extraTab.id ? S.tbOn : {}) }}
+            onClick={() => setTab(extraTab.id)}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"
+              strokeLinecap="round" strokeLinejoin="round" style={S.tbIc}
+              dangerouslySetInnerHTML={{ __html: extraTab.icon }} />
+            {extraTab.label}
+          </button>
+        )}
         {editable && (
           <button style={{ ...S.tb, ...(tab === "edit" ? S.tbOn : {}) }} onClick={() => setTab("edit")}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"
