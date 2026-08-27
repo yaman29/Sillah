@@ -588,6 +588,9 @@ export const SFX = {
   undo:  () => { tone(N.mi, { to: N.do * .85, dur: .2, vol: .12, type: "sine" }); },
   open:  () => tone(N.la, { dur: .1, vol: .09, type: "sine" }),
   nav:   () => tone(N.do, { dur: .07, vol: .08, type: "sine" }),
+  /* خطوةُ اللاعب: نقرةٌ خفيضة مكتومة تتناوب قدمين — تُسمع ولا تُلحّ */
+  walk:  (alt) => tone(N.do * (alt ? .54 : .46),
+                       { dur: .05, vol: .045, type: "sine" }),
   build: () => { tone(N.do * .5, { dur: .16, vol: .13, type: "triangle" });
                  tone(N.sol, { dur: .1, vol: .07, type: "sine", at: .04 }); },
   rank:  () => [N.do, N.mi, N.sol, N.do2, N.mi2].forEach((f, i) =>
@@ -2058,16 +2061,16 @@ function perkBirds() {
 
   /* البعيد أصغر وأخفت وأبطأ — العمق يُحسّ ولا يُرسم */
   const flocks = [
-    { n: 7, w: 7.6, a: .95, sp: .105, y0: 96,  amp: 7, ph0: 0   },
-    { n: 5, w: 5.4, a: .60, sp: .078, y0: 158, amp: 5, ph0: 1.7 },
-    { n: 4, w: 3.8, a: .38, sp: .055, y0: 214, amp: 4, ph0: 3.1 },
+    { n: 7, w: 7.6, a: .95, sp: .105, y0: 40, amp: 7, ph0: 0   },
+    { n: 5, w: 5.4, a: .60, sp: .078, y0: 80, amp: 5, ph0: 1.7 },
+    { n: 4, w: 3.8, a: .38, sp: .055, y0: 118, amp: 4, ph0: 3.1 },
   ];
   flocks.forEach((f, fi) => {
     const base = ((ph * f.sp + f.ph0 * .3) % 1.35) * (W + 420) - 210;
     for (let i = 0; i < f.n; i++) {
       const rank = Math.ceil(i / 2), side = i % 2 ? 1 : -1;
       const x = base - rank * f.w * 4.6;
-      const y = f.y0 + (i ? rank * f.w * 2.1 * side : 0)
+      const y = f.y0 + (i ? rank * f.w * 1.15 * side : 0)
               + Math.sin(ph * 1.05 + i * .8 + fi) * f.amp;
       bird(x, y, f.w, Math.sin(ph * (4.6 - fi * .8) + i * .9 + f.ph0), f.a);
     }
@@ -2075,7 +2078,7 @@ function perkBirds() {
 
   /* محلّقٌ وحده يدور في السماء بجناحين شبه ثابتين */
   const t = (ph * .035) % 1;
-  bird(150 + t * (W - 300), 130 + Math.sin(t * Math.PI * 2) * 44,
+  bird(150 + t * (W - 300), 52 + Math.sin(t * Math.PI * 2) * 32,
        11, Math.sin(ph * .5) * .26, .88);
 
   X.restore();
@@ -2180,6 +2183,8 @@ export function Village({ st, theme = "light", intent, clearIntent, onTour, show
   const pops = useRef({});         /* ما يقفز الآن */
   const dust = useRef([]);         /* نُفَخ الغبار الحيّة */
   const lastBoom = useRef(0);
+  const stepAt = useRef(0);        /* آخر وقعِ قدم */
+  const stepAlt = useRef(false);   /* يمنى أم يسرى */
   const capRef = useRef(30);
   const solidRef = useRef([]);     /* ما لا يُمشى فوقه */
 
@@ -2214,25 +2219,45 @@ export function Village({ st, theme = "light", intent, clearIntent, onTour, show
   useEffect(() => { bRef.current = builds; }, [builds]);
 
   /* مقاس اللوحة — يتبع عرض الشاشة ويحترم كثافة البكسل */
+  const fitRef = useRef(null);
   useEffect(() => {
     const cv = cvRef.current, box = stageRef.current;
     if (!cv || !box) return;
     const fit = () => {
       const d = Math.min(window.devicePixelRatio || 1, 2);
       const w = box.clientWidth || 470;
-      /* الارتفاع من نافذة المتصفّح لا من الحاوية — الحاوية تكبر بكبر اللوحة
-         فتصير حلقةً تتضخّم كل مرّة يُعاد فيها القياس. */
-      const h = fullRef.current ? Math.round(window.innerHeight)
-                                : Math.round(w * 0.766);
+      /* في ملء الشاشة الارتفاع من **الحاوية نفسها**: هي `fixed inset:0`
+         بارتفاع `100dvh`، فارتفاعها هو المرئيّ بالضبط مهما فعلت أشرطة
+         المتصفّح. ⚠ وكان يُقرأ من `window.innerHeight` فيختلف عن المرئيّ
+         في متصفّحات التطبيقات، فيبقى فوق اللوحة وتحتها فراغ.
+         وخارج ملء الشاشة لا يُقرأ ارتفاعُ الحاوية أصلًا: هي تكبر بكبر
+         اللوحة فتصير حلقةً تتضخّم. */
+      const h = fullRef.current
+        ? Math.round(box.clientHeight || window.innerHeight)
+        : Math.round(w * 0.766);
       dpr.current = d;
       cv.style.width = w + "px"; cv.style.height = h + "px";
       cv.width = Math.round(w * d); cv.height = Math.round(h * d);
     };
+    fitRef.current = fit;
     fit();
     const ro = new ResizeObserver(fit);
     ro.observe(box);
-    return () => ro.disconnect();
+    /* أشرطةُ المتصفّح تنزوي وتظهر فيتغيّر المرئيّ بلا تغيّر الحاوية */
+    window.addEventListener("resize", fit);
+    window.addEventListener("orientationchange", fit);
+    const vv = window.visualViewport;
+    if (vv) vv.addEventListener("resize", fit);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", fit);
+      window.removeEventListener("orientationchange", fit);
+      if (vv) vv.removeEventListener("resize", fit);
+    };
   }, []);
+
+  /* الدخول في ملء الشاشة والخروج منه: قياسٌ فوريّ بعد أن يستقرّ التخطيط */
+  useEffect(() => { fitRef.current && fitRef.current(); }, [full]);
 
   /* لوحة المفاتيح */
   useEffect(() => {
@@ -2276,6 +2301,13 @@ export function Village({ st, theme = "light", intent, clearIntent, onTour, show
         }
         P.current.f++;
         PSTATE.x = P.current.x; PSTATE.y = P.current.y;
+        /* وقعُ القدم: كل ٣٠٠ms ما دام يمشي، قدمًا بعد قدم */
+        const nowT = performance.now();
+        if (nowT - stepAt.current > 300) {
+          stepAt.current = nowT;
+          stepAlt.current = !stepAlt.current;
+          SFX.walk(stepAlt.current);
+        }
       }
       raf = requestAnimationFrame(move);
     };
@@ -2565,7 +2597,8 @@ export function Village({ st, theme = "light", intent, clearIntent, onTour, show
       <MonthBar start={start} setStart={setStart} sub={`${fmt(monthGems)} جوهرة هذا الشهر`} />
 
       <div style={{ ...S.stage, ...(full ? S.stageFull : {}) }} ref={stageRef} data-tour="stage">
-        <button style={S.fullB} aria-label={full ? "إنهاء ملء الشاشة" : "ملء الشاشة"}
+        <button style={{ ...S.fullB, ...(full ? S.fullBTop : {}) }}
+          aria-label={full ? "إنهاء ملء الشاشة" : "ملء الشاشة"}
           onClick={() => { SFX.nav(); fullRef.current = !full; setFull(!full); }}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
             strokeLinecap="round" strokeLinejoin="round" style={{ width: 17, height: 17 }}>
@@ -2625,14 +2658,14 @@ export function Village({ st, theme = "light", intent, clearIntent, onTour, show
             else { setTapped(null); selRef.current = null; }
           }} />
         {near && (
-          <div style={S.zc}>
+          <div style={{ ...S.zc, ...(full ? S.zcFull : {}) }}>
             <div style={S.zn}>{near.b} · {ar(near.days)} من {ar(cap)}</div>
             <div style={S.zh}>{near.n}</div>
           </div>
         )}
         {rankUp && <RankUp tier={rankUp} onClose={() => setRankUp(null)} />}
         {tapped && (
-          <div data-card style={S.card}
+          <div data-card style={{ ...S.card, ...(full ? S.safeBot : {}) }}
             onClick={() => { setTapped(null); selRef.current = null; }}>
             <div style={S.cardTop}>
               <div style={{ ...S.cardIc, background: tapped.c }}>
@@ -2652,7 +2685,7 @@ export function Village({ st, theme = "light", intent, clearIntent, onTour, show
             <div style={S.cardX}>اضغط للإغلاق</div>
           </div>
         )}
-        <div ref={padRef} style={S.pad}
+        <div ref={padRef} style={{ ...S.pad, ...(full ? S.padFull : {}) }}
           onTouchStart={(e) => { e.preventDefault(); setJoy(e); }}
           onTouchMove={(e) => { e.preventDefault(); setJoy(e); }}
           onTouchEnd={endJoy}
@@ -2685,18 +2718,23 @@ function MonthBar({ start, setStart, sub }) {
   const gA = start, gB = monthDays(start).slice(-1)[0] || start;
   return (
     <div style={S.mBar}>
-      <button style={S.mArrow} aria-label="الشهر السابق"
-        onClick={() => { SFX.nav(); setStart(shiftMonth(start, -1)); }}><Chevron dir="right" /></button>
-      <div style={{ textAlign: "center", minWidth: 0 }}>
+      <div style={S.mSide}>
+        <SoundBtn />
+        <button style={S.mArrow} aria-label="الشهر السابق"
+          onClick={() => { SFX.nav(); setStart(shiftMonth(start, -1)); }}><Chevron dir="right" /></button>
+      </div>
+      <div style={{ flex: 1, textAlign: "center", minWidth: 0 }}>
         <div style={S.mName}>{hMonthLabel(start)}</div>
         <div style={S.mSub}>
           {sub || `${ar(gA.getDate())} ${GM[gA.getMonth()]} — ${ar(gB.getDate())} ${GM[gB.getMonth()]}`}
         </div>
       </div>
-      <button style={{ ...S.mArrow, ...(atNow ? S.mArrowOff : {}) }} disabled={atNow}
-        aria-label="الشهر التالي"
-        onClick={() => { SFX.nav(); setStart(shiftMonth(start, 1)); }}><Chevron dir="left" /></button>
-      <SoundBtn />
+      <div style={S.mSide}>
+        <button style={{ ...S.mArrow, ...(atNow ? S.mArrowOff : {}) }} disabled={atNow}
+          aria-label="الشهر التالي"
+          onClick={() => { SFX.nav(); setStart(shiftMonth(start, 1)); }}><Chevron dir="left" /></button>
+        <span style={S.mPad} aria-hidden="true" />
+      </div>
     </div>
   );
 }
@@ -4341,6 +4379,11 @@ const S = {
   pad: { position: "absolute", bottom: 11, left: 11, width: 84, height: 84, borderRadius: "50%",
          background: "rgba(255,255,255,.2)", border: "1px solid rgba(255,255,255,.3)",
          backdropFilter: "blur(4px)" },
+  /* في ملء الشاشة حافّةُ اللوحة هي حافّةُ الجهاز: يُرفع المقبض عن شريط
+     المتصفّح وعن خطّ الصفحة الرئيسة، وإلا وقع الإبهام على غير موضعه. */
+  padFull: { bottom: "calc(26px + env(safe-area-inset-bottom, 0px))", left: 18 },
+  safeBot: { bottom: "calc(26px + env(safe-area-inset-bottom, 0px))" },
+  fullBTop: { top: "calc(10px + env(safe-area-inset-top, 0px))" },
   knob: { position: "absolute", width: 36, height: 36, borderRadius: "50%", left: 24, top: 24,
           background: "radial-gradient(circle at 35% 30%,var(--sp-goldL),var(--sp-gold))",
           boxShadow: "0 2px 9px rgba(0,0,0,.35)" },
@@ -4362,6 +4405,7 @@ const S = {
   zc: { position: "absolute", top: 0, right: 0, left: 0, padding: "7px 13px 14px",
         background: "linear-gradient(180deg,var(--sp-scrim),transparent)",
         display: "flex", alignItems: "baseline", gap: 8, pointerEvents: "none" },
+  zcFull: { paddingTop: "calc(9px + env(safe-area-inset-top, 0px))" },
   zn: { fontSize: 11.5, fontWeight: 700, color: "var(--sp-gold)", whiteSpace: "nowrap" },
   zh: { fontSize: 9.5, color: "var(--sp-mut)", whiteSpace: "nowrap",
         overflow: "hidden", textOverflow: "ellipsis" },
@@ -4520,6 +4564,8 @@ const S = {
   mArrow: { width: 34, height: 34, borderRadius: 11, flexShrink: 0, fontSize: 19, lineHeight: 1,
             border: "1px solid var(--sp-line)", background: "var(--sp-bg)", color: "var(--sp-prim)" },
   mArrowOff: { opacity: .3 },
+  mSide: { display: "flex", alignItems: "center", gap: 6, flexShrink: 0 },
+  mPad: { width: 34, height: 34, flexShrink: 0 },
   mName: { fontSize: 14, fontWeight: 700 },
   mSub: { fontSize: 9.5, color: "var(--sp-mut)", marginTop: 1 },
   /* لوحة الإدارة */
