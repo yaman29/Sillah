@@ -2163,6 +2163,10 @@ export function Village({ st, theme = "light", intent, clearIntent, onTour, show
   const padRef = useRef(null);
   const [viewDay, setViewDay] = useState(days.length);
   const [full, setFull] = useState(false);       /* المشهد يملأ الشاشة */
+  /* معاينةُ التمام: الأرضُ كما تكون لو عُبِّئت السننُ كلَّ يومٍ من الشهر.
+     تُقرأ من السنن الحيّة (أي من قاعدة البيانات على الموقع)، فما يراه
+     الطالب هو بستانُه هو لا صورةً معدّة. ولا تمسّ سجلَّه ولا جواهره. */
+  const [peek, setPeek] = useState(false);
   const fullRef = useRef(false);
   const [near, setNear] = useState(null);
 
@@ -2227,8 +2231,9 @@ export function Village({ st, theme = "light", intent, clearIntent, onTour, show
   /* المعاينة تُظهر الأرض عامرةً، وإلا لم يُرَ أثر المكافأة على أرضٍ خالية */
   /* أثناء شرح «كل سنّةٍ تبني شيئًا» يُعرض البستان عامرًا — فالكلام عن
      البناء أمام أرضٍ خالية لا يُقنع أحدًا. */
-  const builds = useMemo(() => tally(viewDay, showcase),
-                         [tally, viewDay, showcase]);
+  const ideal = showcase || peek;
+  const builds = useMemo(() => tally(viewDay, ideal),
+                         [tally, viewDay, ideal]);
   const bRef = useRef(builds);
   useEffect(() => { bRef.current = builds; }, [builds]);
 
@@ -2683,6 +2688,11 @@ export function Village({ st, theme = "light", intent, clearIntent, onTour, show
             if (best && nd < 46) { SFX.open(); setTapped(best); selRef.current = best; }
             else { setTapped(null); selRef.current = null; }
           }} />
+        {peek && !near && (
+          <div style={{ ...S.peekTag, ...(full ? S.peekTagFull : {}) }}>
+            <span style={S.peekPill}>هكذا يكون بستانك بعد {ar(cap)} يومًا</span>
+          </div>
+        )}
         {near && (
           <div style={{ ...S.zc, ...(full ? S.zcFull : {}) }}>
             <div style={S.zn}>{near.b} · {ar(near.days)} من {ar(cap)}</div>
@@ -2728,11 +2738,24 @@ export function Village({ st, theme = "light", intent, clearIntent, onTour, show
       {/* شريطُ الأيام: سطرٌ واحد رفيع — كان بطاقةً بعنوانٍ وثلاثة أسطر
           تأكل مئةَ بكسل تحت المشهد بلا أن تضيف معنى. */}
       <div style={S.slRow} data-tour="slider">
-        <span style={S.slDay}>يوم {ar(Math.min(viewDay, days.length))}</span>
+        <span style={S.slDay}>{peek ? "مكتملًا" : `يوم ${ar(Math.min(viewDay, days.length))}`}</span>
         <input type="range" min={1} max={days.length} value={Math.min(viewDay, days.length)}
-          aria-label="يوم العرض" onChange={(e) => setViewDay(+e.target.value)}
-          style={{ flex: 1, minWidth: 0, accentColor: "var(--sp-gold)" }} />
+          aria-label="يوم العرض" disabled={peek} onChange={(e) => setViewDay(+e.target.value)}
+          style={{ flex: 1, minWidth: 0, accentColor: "var(--sp-gold)",
+                   opacity: peek ? .35 : 1 }} />
         <span style={S.slBuilt}>{fmt(totalBuilt)} بناءً</span>
+        {/* «شاهده مكتملًا»: معاينةٌ لا تغيّر شيئًا — يرى ما ينتظره فيسعى إليه */}
+        <button style={{ ...S.peekB, ...(peek ? S.peekBOn : {}) }}
+          aria-label={peek ? "ارجع إلى بستانك" : "شاهد بستانك مكتملًا"}
+          onClick={() => { SFX.nav(); setPeek(!peek); }}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+            strokeLinecap="round" strokeLinejoin="round" style={{ width: 14, height: 14 }}>
+            {peek ? <><path d="M3 12h18" /><path d="M10 5l-7 7 7 7" /></>
+                  : <><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" />
+                      <circle cx="12" cy="12" r="3" /></>}
+          </svg>
+          {peek ? "ارجع" : "مكتملًا"}
+        </button>
       </div>
     </div>
   );
@@ -4535,6 +4558,20 @@ const S = {
   slDate: { fontSize: 13, fontWeight: 700 },
   slGreg: { fontSize: 9.5, color: "var(--sp-mut)" },
   slBuilt: { fontSize: 10.5, color: "var(--sp-gold)", fontWeight: 700, whiteSpace: "nowrap" },
+  peekB: { display: "flex", alignItems: "center", gap: 5, flexShrink: 0,
+           borderWidth: 1, borderStyle: "solid", borderColor: "var(--sp-goldL)",
+           background: "var(--sp-surf)",
+           color: "var(--sp-gold)", borderRadius: 10, padding: "5px 9px",
+           fontSize: 10.5, fontWeight: 700, fontFamily: "inherit", whiteSpace: "nowrap" },
+  peekBOn: { background: "var(--sp-gold)", borderColor: "var(--sp-gold)", color: "#fff" },
+  peekTag: { position: "absolute", top: 10, insetInlineStart: 0, insetInlineEnd: 0,
+             padding: "0 52px", boxSizing: "border-box",
+             textAlign: "center", zIndex: 7, pointerEvents: "none" },
+  peekPill: { display: "inline-block", background: "var(--sp-scrim)",
+              borderWidth: 1, borderStyle: "solid", borderColor: "var(--sp-goldL)",
+              borderRadius: 999, padding: "4px 12px", fontSize: 10.5, fontWeight: 700,
+              color: "var(--sp-gold)", backdropFilter: "blur(5px)" },
+  peekTagFull: { top: "calc(46px + env(safe-area-inset-top, 0px))" },
   slEnds: { display: "flex", justifyContent: "space-between", fontSize: 9, color: "var(--sp-mut)" },
   /* شريط الأيام */
   dayStrip: { display: "flex", gap: 7, overflowX: "auto", padding: "3px 2px 10px",
