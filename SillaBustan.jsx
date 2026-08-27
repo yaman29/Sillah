@@ -4027,6 +4027,31 @@ function Tour({ tab, setTab, onDone, onCta, onStep }) {
   const [i, setI] = useState(0);
   const [box, setBox] = useState(null);
   const step = TOUR[i];
+  const cardRef = useRef(null);
+  /* ارتفاعُ البطاقة الطبيعيّ — به يُختار موضعُها، فلا يُقتطع منها شيء */
+  const [need, setNeed] = useState(0);
+  const [vh, setVh] = useState(() =>
+    typeof window === "undefined" ? 800 : window.innerHeight);
+  const rolled = useRef("");   /* أُزيح المشهدُ لهذه الخطوة في هذا التبويب؟ */
+
+  useEffect(() => {
+    const on = () => setVh(window.innerHeight);
+    window.addEventListener("resize", on);
+    window.addEventListener("orientationchange", on);
+    const vv = window.visualViewport;
+    if (vv) vv.addEventListener("resize", on);
+    return () => {
+      window.removeEventListener("resize", on);
+      window.removeEventListener("orientationchange", on);
+      if (vv) vv.removeEventListener("resize", on);
+    };
+  }, []);
+
+  useEffect(() => {
+    const el = cardRef.current; if (!el) return;
+    const h = el.scrollHeight;
+    setNeed((n) => (Math.abs(n - h) > 2 ? h : n));
+  });
 
   /* الجولة تنقل بين التبويبات بنفسها، وتُخبر بموضعها */
   useEffect(() => {
@@ -4043,6 +4068,18 @@ function Tour({ tab, setTab, onDone, onCta, onStep }) {
       if (!el) { raf = requestAnimationFrame(find); return; }
       const r = el.getBoundingClientRect();
       if (!r.width) { raf = requestAnimationFrame(find); return; }
+      /* يُزاح المشهدُ مرّةً لكل خطوة حتى يخلو تحت العنصر مكانٌ للبطاقة —
+         والطويلُ يُرفع إلى أعلى الشاشة، والقصيرُ يُوسَّط. */
+      const key = i + "|" + tab;
+      if (rolled.current !== key) {
+        rolled.current = key;
+        if (el.scrollIntoView) {
+          el.scrollIntoView({ block: r.height > window.innerHeight * .42 ? "start" : "center",
+                              inline: "nearest" });
+        }
+        raf = requestAnimationFrame(find);
+        return;
+      }
       setBox({ x: r.left, y: r.top, w: r.width, h: r.height });
     };
     setBox(null); find();
@@ -4057,11 +4094,19 @@ function Tour({ tab, setTab, onDone, onCta, onStep }) {
     try { window.localStorage.setItem(LS_TOUR, "1"); } catch (e) { /* تجاهل */ }
     onDone(); if (fire && step.cta) onCta(step.at);
   };
-  /* البطاقة في الجهة الأوسع من البقعة، ولا تتجاوز الشاشة أبدًا */
-  const vh = typeof window === "undefined" ? 800 : window.innerHeight;
-  const above = box ? box.y - 16 : 0, under = box ? vh - (box.y + box.h) - 16 : vh;
-  const below = !box || under >= above;
-  const room = Math.max(180, (below ? under : above) - 22);
+  /* البطاقة تُوضع حيث تظهر **كاملةً**: تحت البقعة إن وسعتها، وإلا فوقها،
+     وإلا لُصقت بأسفل الشاشة وغطّت ما غطّت — فالكلامُ يُقرأ ولا يُقتطع.
+     ⚠ وكانت تأخذ ما بقي من مكانٍ بحدٍّ أدنى ١٨٠px وتُمرَّر داخليًّا، فتُخفي
+     نقاطَها وزرَّ «التالي» ويظنّ القارئُ أنّ الكلام انتهى. */
+  const M = 14;
+  const above = box ? box.y - M : 0;
+  const under = box ? vh - (box.y + box.h) - M : vh;
+  const fitsUnder = !box || under >= need;
+  const pos = !box
+    ? { top: "50%", transform: "translate(-50%,-50%)" }
+    : fitsUnder ? { top: box.y + box.h + M }
+    : above >= need ? { top: Math.max(M, box.y - M - need) }
+    : { top: Math.max(M, vh - need - M) };
 
   return (
     <div style={S.tourWrap} onClick={(e) => e.stopPropagation()}>
@@ -4069,10 +4114,9 @@ function Tour({ tab, setTab, onDone, onCta, onStep }) {
         <div style={{ ...S.tourHole, left: box.x - 8, top: box.y - 8,
                       width: box.w + 16, height: box.h + 16 }} />
       ) : <div style={S.tourDim} />}
-      <div style={{ ...S.tourCard,
-                    ...(box ? (below ? { top: box.y + box.h + 16 } : { bottom: vh - box.y + 16 })
-                            : { top: "50%", transform: "translate(-50%,-50%)" }),
-                    ...(box ? { maxHeight: room, overflowY: "auto" } : {}) }}>
+      <div ref={cardRef}
+           style={{ ...S.tourCard, ...pos,
+                    maxHeight: Math.max(160, vh - M * 2), overflowY: "auto" }}>
         <div style={S.tourTop}>
           <span style={S.tourIc}><TourIcon k={step.ic} /></span>
           <div style={S.tourT}>{step.t}</div>
@@ -4261,7 +4305,8 @@ const S = {
   root: { minHeight: "100vh", background: "var(--sp-bg)", color: "var(--sp-txt)",
           fontFamily: "'IBM Plex Sans Arabic',system-ui,sans-serif", direction: "rtl",
           paddingBottom: 88, transition: "background .3s,color .3s" },
-  wrap: { maxWidth: 470, margin: "0 auto", padding: 14 },
+  wrap: { maxWidth: 470, margin: "0 auto", padding: 14,
+          userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" },
   lbl: { fontSize: 11, color: "var(--sp-mut)" },
   head: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
   h1: { fontSize: 17, fontWeight: 700 },
@@ -4368,7 +4413,8 @@ const S = {
   stage: { position: "relative", borderRadius: 18, overflow: "hidden",
            borderWidth: 1, borderStyle: "solid", borderColor: "var(--sp-line)",
            boxShadow: "var(--sp-sh)",
-           marginBottom: 10, touchAction: "none" },
+           marginBottom: 10, touchAction: "none",
+           userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" },
   stageFull: { position: "fixed", inset: 0, zIndex: 60, borderRadius: 0,
                marginBottom: 0, borderWidth: 0, height: "100dvh" },
   fullB: { position: "absolute", top: 10, right: 10, zIndex: 8, width: 34, height: 34,
@@ -4421,23 +4467,23 @@ const S = {
                  فبطاقةٌ عرضها ٣٧٨ تصير ٤١٠ ويضيع هامشُها. */
               width: "min(384px, calc(100vw - 56px))", boxSizing: "border-box",
               background: "var(--sp-surf)",
-              borderRadius: 20, padding: "16px 16px 13px",
+              borderRadius: 20, padding: "14px 15px 12px",
               boxShadow: "0 14px 40px rgba(10,26,20,.34)", textAlign: "right" },
-  tourTop: { display: "flex", alignItems: "center", gap: 10, marginBottom: 8 },
+  tourTop: { display: "flex", alignItems: "center", gap: 10, marginBottom: 7 },
   tourIc: { width: 38, height: 38, borderRadius: 13, flexShrink: 0, color: "#fff",
             background: "linear-gradient(135deg,var(--sp-mint),var(--sp-prim))",
             display: "flex", alignItems: "center", justifyContent: "center" },
   tourT: { fontSize: 15.5, fontWeight: 700, lineHeight: 1.35 },
-  tourB: { fontSize: 12.5, lineHeight: 1.85, color: "var(--sp-txt)" },
-  tourQ: { fontSize: 11.5, lineHeight: 1.8, color: "var(--sp-gold)", marginTop: 8,
-           background: "var(--sp-aura)", borderRadius: 11, padding: "8px 11px" },
-  tourDots: { display: "flex", gap: 5, justifyContent: "center", margin: "13px 0 11px" },
+  tourB: { fontSize: 12.5, lineHeight: 1.7, color: "var(--sp-txt)" },
+  tourQ: { fontSize: 11.5, lineHeight: 1.7, color: "var(--sp-gold)", marginTop: 7,
+           background: "var(--sp-aura)", borderRadius: 11, padding: "7px 10px" },
+  tourDots: { display: "flex", gap: 5, justifyContent: "center", margin: "9px 0 8px" },
   tourDot: { width: 6, height: 6, borderRadius: "50%", background: "var(--sp-line)" },
   tourDotOn: { background: "var(--sp-prim)", width: 17, borderRadius: 3 },
   tourRow: { display: "flex", alignItems: "center", gap: 10 },
   tourSkip: { border: "none", background: "none", color: "var(--sp-mut)",
               fontSize: 12, padding: "9px 4px" },
-  tourNext: { flex: 1, border: "none", borderRadius: 13, padding: "11px 14px",
+  tourNext: { flex: 1, border: "none", borderRadius: 13, padding: "10px 14px",
               fontSize: 13, fontWeight: 700, color: "#fff",
               background: "linear-gradient(135deg,var(--sp-mint),var(--sp-prim))" },
   tourAgain: { border: "1px solid var(--sp-line)", background: "var(--sp-surf)",
