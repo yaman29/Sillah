@@ -27,7 +27,11 @@ import React, { useState, useRef, useEffect, useMemo, useCallback,
 
 /* ════════ ثوابت ════════ */
 export const DAYS_TOTAL = 30;          // أيام الشهر — سقف كل بناء
-const ZOOM = 0.44;                     // تكبير ثابت — البستان مصغّر دائمًا
+const ZOOM0 = 0.44;                    // تكبير العادة — البستان مصغّر فيُرى كلّه
+const ZMAX  = ZOOM0 * 1.35;            // أقصى ما يكبر في ملء الشاشة
+/* التكبيرُ الجاري: يُضبط في حلقة الرسم كل إطار، وتقرؤه اللمسةُ والحركة
+   والحدودُ — فلا يختلف اثنان في مقياس المشهد. */
+let ZOOM = ZOOM0;
 
 /* ════════ الإسقاط الإيزومتري ════════
    الأرض تُدار ٤٥° وتُضغط رأسيًا للنصف، فتصير مربّعاتها معيّنات ويظهر العمق.
@@ -1453,6 +1457,9 @@ const FOOT = { minaret:9, sundial:12, spring:22, well:16, crescent:12, shieldL:2
 
 /* موضع اللاعب وبصماتُ ما يصدّه — منفذُ اختبارٍ يقرأ منه الفحص الآليّ
    أن اللاعب لم يدخل بناءً قطّ. لا تقرأ منه الواجهة شيئًا. */
+/* ما تراه العينُ من الأرض في هذا الإطار — تحتاجه الطبقاتُ التي تعمّ
+   المشهد كلَّه (كصبغة سماء النجوم)، فتغطّي المرئيَّ لا حدودَ الأرض. */
+export const VIS = { x: 0, y: 0, w: 0, h: 0 };
 export const PSTATE = { x: 0, y: 0, solids: [] };
 
 /* ما يترنّح مع الريح — النبات القائم وحده، لا ما يغطّي الأرض */
@@ -1733,8 +1740,10 @@ const RN = (i) => ((Math.sin(i * 12.9898) * 43758.5453) % 1 + 1) % 1;
 /* نجومٌ تتلألأ وشُهبٌ تعبر — أوّل ما يُرسم فوق الأرض */
 function perkStars() {
   X.save();
+  /* ⚠ تعمّ المرئيَّ لا حدودَ الأرض: الشاشةُ الطويلة تُظهر ما وراءها،
+     فصبغةٌ تقف عند الحدّ تصير شريطين أفتحَ فوق المشهد وتحته. */
   X.fillStyle = "rgba(26,38,84,.15)";
-  X.fillRect(0, 0, W, H);
+  X.fillRect(VIS.x, VIS.y, VIS.w, VIS.h);
   /* دربٌ لبنيّ خافت يعبر السماء */
   X.globalAlpha = .10;
   const mw = X.createLinearGradient(0, 40, W, 250);
@@ -2059,7 +2068,10 @@ function perkBirds() {
     X.beginPath(); X.ellipse(x, y + w * .07, w * .24, w * .12, 0, 0, 7); X.fill();
   };
 
-  /* البعيد أصغر وأخفت وأبطأ — العمق يُحسّ ولا يُرسم */
+  /* البعيد أصغر وأخفت وأبطأ — العمق يُحسّ ولا يُرسم.
+     ⚠ وكلُّها في الشريط العلويّ وحده: أعلى الأرض عند `TOPSP`، فما جاوزه
+     صار طيرًا يمشي فوق البيوت. كانت الأسراب عند ٩٦ و١٥٨ و٢١٤ فتعبر
+     المشهد كلَّه. */
   const flocks = [
     { n: 7, w: 7.6, a: .95, sp: .105, y0: 40, amp: 7, ph0: 0   },
     { n: 5, w: 5.4, a: .60, sp: .078, y0: 80, amp: 5, ph0: 1.7 },
@@ -2203,13 +2215,15 @@ export function Village({ st, theme = "light", intent, clearIntent, onTour, show
   const [rankUp, setRankUp] = useState(null);
   const [track, setTrack] = useState(false);
   useEffect(() => {
+    /* تُقارَن بعتبة جواهر المرتبة الحالية لا بترتيبها في القائمة، فلا يفوت
+       الاحتفاءَ أو يتكرّر إن أضاف الأدمن مرتبةً بينهما أو حذف واحدة. */
     let seen = RANKIO.get();
     if (!Number.isFinite(seen)) seen = -1;
-    if (rank.i > seen) {
-      RANKIO.set(rank.i);
+    if (rank.cur.g > seen) {
+      RANKIO.set(rank.cur.g);
       if (seen >= 0) { setRankUp(rank.cur); SFX.rank(); }
     }
-  }, [rank.i]);
+  }, [rank.cur.g]);
   /* المعاينة تُظهر الأرض عامرةً، وإلا لم يُرَ أثر المكافأة على أرضٍ خالية */
   /* أثناء شرح «كل سنّةٍ تبني شيئًا» يُعرض البستان عامرًا — فالكلام عن
      البناء أمام أرضٍ خالية لا يُقنع أحدًا. */
@@ -2325,6 +2339,14 @@ export function Village({ st, theme = "light", intent, clearIntent, onTour, show
       DCAP = capRef.current;
       const d = dpr.current;
       const cw = cv.width / d, ch = cv.height / d;      /* بكسلات CSS */
+      /* في ملء الشاشة يكبر التكبير حتى تغطّي الأرضُ الشاشة، بسقفٍ يبقي
+         البستان كلَّه في العين — وخارجه ثابتٌ كما كان. */
+      const z = fullRef.current
+        ? Math.min(ZMAX, Math.max(ZOOM0, ch / H))
+        : ZOOM0;
+      /* عرضُ الحدّ مقسومٌ على التكبير، فصورُ الأرض والأبنية المخزّنة
+         تُبطَل عند تغيّره وإلا بقيت حدودُها بسماكة التكبير القديم. */
+      if (z !== ZOOM) { ZOOM = z; GCACHE.v = null; SPRC.n++; }
       const vw = cw / ZOOM, vh = ch / ZOOM;             /* ما يُرى من الأرض */
       /* الكاميرا تتبع اللاعب في فضاء الشاشة المُسقَط لا في فضاء الأرض */
       const pjx = IX(P.current.x, P.current.y), pjy = IY(P.current.x, P.current.y);
@@ -2333,9 +2355,13 @@ export function Village({ st, theme = "light", intent, clearIntent, onTour, show
       const cx = Math.max(Math.min(vw, W) / 2, Math.min(W - Math.min(vw, W) / 2, cam.current.x));
       const cy = Math.max(Math.min(vh, H) / 2, Math.min(H - Math.min(vh, H) / 2, cam.current.y));
       view.current = { cx, cy, vw, vh };
+      VIS.x = cx - vw / 2; VIS.y = cy - vh / 2; VIS.w = vw; VIS.h = vh;
       X.setTransform(ZOOM * d, 0, 0, ZOOM * d, 0, 0);
       X.translate(-(cx - vw / 2), -(cy - vh / 2));
-      X.fillStyle = sat("#D8D2C0");
+      /* ⚠ بلون الرمل خارج السور نفسِه (بلا تشبيع): الأرض ٨٣٠ وحدة ارتفاعًا،
+         والشاشةُ الطويلة تُظهر أكثر منها — فلونٌ مخالف يصير شريطين فوق
+         المشهد وتحته يبدوان كأنّ اللوحة لم تملأ الشاشة. */
+      X.fillStyle = PAL.sand;
       X.fillRect(cx - vw / 2, cy - vh / 2, vw, vh);
       X.drawImage(groundLayer(), 0, 0);
       /* ما نما منذ الإطار السابق: يقفز وينفض غبارًا */
@@ -2717,24 +2743,28 @@ function MonthBar({ start, setStart, sub }) {
   const atNow = iso(monthStart(today())) === iso(start);
   const gA = start, gB = monthDays(start).slice(-1)[0] || start;
   return (
+    /* جانبان متساويا العرض: العنوان في وسط الشريط تمامًا، والسهمان
+       على بُعدٍ واحد من الحافّتين. ⚠ وكان مفتاحُ الصوت يلتصق بسهم «التالي»
+       في جهةٍ واحدة، فيميل العنوان ويبدو السهمان في غير موضعهما. */
     <div style={S.mBar}>
-      <div style={S.mSide}>
-        <SoundBtn />
-        <button style={S.mArrow} aria-label="الشهر السابق"
-          onClick={() => { SFX.nav(); setStart(shiftMonth(start, -1)); }}><Chevron dir="right" /></button>
-      </div>
-      <div style={{ flex: 1, textAlign: "center", minWidth: 0 }}>
+      {/* اسمُ الشهر موسَّطٌ في الشريط بذاته لا بما حوله، فلا يميلُ بميل
+          الأزرار. ⚠ وكان يُوسَّط بجانبين متساويين ففيهما فراغٌ مصطنع. */}
+      <div style={S.mTitle}>
         <div style={S.mName}>{hMonthLabel(start)}</div>
         <div style={S.mSub}>
           {sub || `${ar(gA.getDate())} ${GM[gA.getMonth()]} — ${ar(gB.getDate())} ${GM[gB.getMonth()]}`}
         </div>
       </div>
+      {/* أوّلُ الأبناء أقصى اليمين في RTL: الصوتُ عند الحافّة ثم «السابق»،
+          و«التالي» عند الحافّة المقابلة. */}
       <div style={S.mSide}>
-        <button style={{ ...S.mArrow, ...(atNow ? S.mArrowOff : {}) }} disabled={atNow}
-          aria-label="الشهر التالي"
-          onClick={() => { SFX.nav(); setStart(shiftMonth(start, 1)); }}><Chevron dir="left" /></button>
-        <span style={S.mPad} aria-hidden="true" />
+        <SoundBtn />
+        <button style={S.mArrow} aria-label="الشهر السابق"
+          onClick={() => { SFX.nav(); setStart(shiftMonth(start, -1)); }}><Chevron dir="right" /></button>
       </div>
+      <button style={{ ...S.mArrow, ...(atNow ? S.mArrowOff : {}) }} disabled={atNow}
+        aria-label="الشهر التالي"
+        onClick={() => { SFX.nav(); setStart(shiftMonth(start, 1)); }}><Chevron dir="left" /></button>
     </div>
   );
 }
@@ -4422,14 +4452,14 @@ const S = {
            borderColor: "rgba(255,255,255,.35)", background: "rgba(20,40,36,.42)",
            color: "#fff", display: "flex", alignItems: "center", justifyContent: "center",
            backdropFilter: "blur(4px)", padding: 0 },
-  pad: { position: "absolute", bottom: 11, left: 11, width: 84, height: 84, borderRadius: "50%",
+  pad: { position: "absolute", bottom: 11, right: 14, width: 84, height: 84, borderRadius: "50%",
          background: "rgba(255,255,255,.2)", border: "1px solid rgba(255,255,255,.3)",
          backdropFilter: "blur(4px)" },
   /* في ملء الشاشة حافّةُ اللوحة هي حافّةُ الجهاز: يُرفع المقبض عن شريط
      المتصفّح وعن خطّ الصفحة الرئيسة، وإلا وقع الإبهام على غير موضعه. */
-  padFull: { bottom: "calc(26px + env(safe-area-inset-bottom, 0px))", left: 18 },
+  padFull: { bottom: "calc(46px + env(safe-area-inset-bottom, 0px))", right: 20 },
   safeBot: { bottom: "calc(26px + env(safe-area-inset-bottom, 0px))" },
-  fullBTop: { top: "calc(10px + env(safe-area-inset-top, 0px))" },
+  fullBTop: { top: "calc(46px + env(safe-area-inset-top, 0px))" },
   knob: { position: "absolute", width: 36, height: 36, borderRadius: "50%", left: 24, top: 24,
           background: "radial-gradient(circle at 35% 30%,var(--sp-goldL),var(--sp-gold))",
           boxShadow: "0 2px 9px rgba(0,0,0,.35)" },
@@ -4451,7 +4481,7 @@ const S = {
   zc: { position: "absolute", top: 0, right: 0, left: 0, padding: "7px 13px 14px",
         background: "linear-gradient(180deg,var(--sp-scrim),transparent)",
         display: "flex", alignItems: "baseline", gap: 8, pointerEvents: "none" },
-  zcFull: { paddingTop: "calc(9px + env(safe-area-inset-top, 0px))" },
+  zcFull: { paddingTop: "calc(46px + env(safe-area-inset-top, 0px))" },
   zn: { fontSize: 11.5, fontWeight: 700, color: "var(--sp-gold)", whiteSpace: "nowrap" },
   zh: { fontSize: 9.5, color: "var(--sp-mut)", whiteSpace: "nowrap",
         overflow: "hidden", textOverflow: "ellipsis" },
@@ -4604,14 +4634,17 @@ const S = {
   dlgX: { width: "100%", border: "none", borderRadius: 13, padding: 12, fontSize: 13.5,
           fontWeight: 700, color: "#fff", background: "var(--sp-prim)", marginTop: 15 },
   /* شريط الشهر */
-  mBar: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+  mBar: { position: "relative", display: "flex", alignItems: "center",
+          justifyContent: "space-between", gap: 8,
           background: "var(--sp-surf)", border: "1px solid var(--sp-line)", borderRadius: 15,
-          padding: "9px 8px", marginBottom: 10, boxShadow: "var(--sp-sh)" },
+          padding: "9px 10px", marginBottom: 10, boxShadow: "var(--sp-sh)" },
+  mTitle: { position: "absolute", insetInlineStart: 0, insetInlineEnd: 0,
+            padding: "0 84px", boxSizing: "border-box",
+            textAlign: "center", pointerEvents: "none" },
   mArrow: { width: 34, height: 34, borderRadius: 11, flexShrink: 0, fontSize: 19, lineHeight: 1,
             border: "1px solid var(--sp-line)", background: "var(--sp-bg)", color: "var(--sp-prim)" },
   mArrowOff: { opacity: .3 },
   mSide: { display: "flex", alignItems: "center", gap: 6, flexShrink: 0 },
-  mPad: { width: 34, height: 34, flexShrink: 0 },
   mName: { fontSize: 14, fontWeight: 700 },
   mSub: { fontSize: 9.5, color: "var(--sp-mut)", marginTop: 1 },
   /* لوحة الإدارة */
