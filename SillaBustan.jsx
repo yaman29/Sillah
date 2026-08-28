@@ -62,13 +62,16 @@ const SITE = { fort: 1, fence: 1 };
 
 /* بصمةُ كل بناء عند تمامه (٣٠ يومًا) في فضاء الأرض — مقيسةٌ من الرسّامين
    لا مقدّرة. وما ليس هنا يأخذ المقاس الأصغر، فسنّةٌ جديدة لا تكسر شيئًا. */
-const BSIZE = {
+/* مقاسُ بصمة كل بناءٍ عند تمامه — يقرؤه التخطيطُ والفحصُ الآليّ */
+export const BSIZE = {
   house:[242,160], flower:[174,84], lamp:[200,54], mihrab:[164,30],
   garden:[158,84], palm:[154,112], fountain:[154,50], arak:[140,40],
   fruit:[136,44], tent:[120,44], stream:[210,130], bighouse:[84,72],
   bridge:[110,70], path:[124,34], pattern:[148,28], rug:[76,50],
   gate:[68,42], nur:[44,34], spring:[52,52], shieldL:[48,48],
   well:[40,40], sundial:[34,34], crescent:[34,34], minaret:[30,30],
+  /* الأبنيةُ المضافة لسننٍ جديدة */
+  beehive:[124,42], cypress:[112,60], library:[64,50], sunrise:[56,34],
 };
 const BDEF = [96, 80];                  /* مقاسٌ افتراضيّ لأيّ بناءٍ جديد */
 const GAP = 30;                         /* فرجةٌ بين بقعةٍ وأخرى */
@@ -1420,6 +1423,80 @@ DRAW.fence=(x,y,n)=>{if(!n)return;const k=Math.min(n,DCAP);X.save();
   X.beginPath();X.arc(a,b-21,2,0,7);X.stroke()}
  X.restore()};
 
+/* ════════ أبنيةٌ إضافيةٌ لسننٍ جديدة ════════
+   لا تبنيها سنّةٌ من الأصل الـ٢٦ — أُضيفت ليختارها صاحب المشروع من لوحة
+   الإدارة لِما يُحدثه من سنن (أذكار الصباح ونحوها). وكلُّها تنمو بعدد
+   الأيام كغيرها، ولها بصمةٌ فلا يمرّ اللاعب خلالها.                      */
+
+/* ── شمسُ الصباح: قرصٌ يعلو وأشعّةٌ تتكاثر — لأذكار الصباح ── */
+DRAW.sunrise=(x,y,n)=>{if(!n)return;const k=Math.min(n,DCAP)/DCAP;
+ const r=9+k*13,up=16+k*26;
+ shadow(x,y,16+k*10,5+k*3);
+ X.fillStyle=lit(x,y,44,'#8FBE93','#5F9470');
+ X.beginPath();X.ellipse(x,y,20+k*8,7+k*3,0,Math.PI,0);X.closePath();X.fill();edge(1.2);
+ const cy=y-up;
+ const rays=4+Math.round(k*12);
+ X.strokeStyle=sat('#F0B93A');X.lineCap='round';
+ for(let i=0;i<rays;i++){const a=Math.PI+(i+.5)/rays*Math.PI;
+  const L=r*(.5+((i*7)%5)/9);
+  X.lineWidth=2.2+k*1.4;
+  X.beginPath();X.moveTo(x+Math.cos(a)*(r+3),cy+Math.sin(a)*(r+3)*.72);
+  X.lineTo(x+Math.cos(a)*(r+3+L),cy+Math.sin(a)*(r+3+L)*.72);X.stroke()}
+ const g=X.createRadialGradient(x-r*.3,cy-r*.35,r*.2,x,cy,r);
+ g.addColorStop(0,sat('#FFE9A8'));g.addColorStop(1,sat('#E8A81E'));
+ X.fillStyle=g;X.beginPath();X.arc(x,cy,r,0,7);X.fill();edge(1.5);
+ X.fillStyle='rgba(255,255,255,.42)';
+ X.beginPath();X.arc(x-r*.34,cy-r*.36,r*.26,0,7);X.fill()};
+
+/* ── خليّةُ نحل: قبابٌ مضلّعة يزيد عددُها، والنحلُ يطوف ── */
+DRAW.beehive=(x,y,n)=>{const k=Math.min(Math.ceil(n*3/DCAP),3);
+ plot('beehive',k,3,40,30).forEach(({wx,wy},idx)=>{
+  const a=IX(wx,wy),b=IY(wx,wy),s=.66+Math.min(n,DCAP)/DCAP*.4;
+  shadow(a,b,13*s,4.6*s);
+  for(let i=0;i<4;i++){const w=(15-i*2.7)*s,h=5.4*s,cy=b-i*5.1*s-h*.5;
+   X.fillStyle=lit(a,cy,w*2,'#E8C271','#B98F35');
+   X.beginPath();X.ellipse(a,cy,w,h,0,0,7);X.fill();edge(1.1)}
+  X.fillStyle=sat('#5A3E1C');
+  X.beginPath();X.ellipse(a,b-4.4*s,2.6*s,1.9*s,0,0,7);X.fill();
+  for(let i=0;i<2;i++){const t=ph*.9+i*3.1+idx;
+   const bx=a+Math.cos(t)*(15+i*4)*s,by=b-24*s+Math.sin(t*1.4)*6*s;
+   X.fillStyle=sat('#E0A81E');X.beginPath();X.arc(bx,by,1.8*s,0,7);X.fill();
+   X.strokeStyle='rgba(255,255,255,.75)';X.lineWidth=.9;
+   X.beginPath();X.moveTo(bx-2.4*s,by-1.6*s);X.lineTo(bx+2.4*s,by-1.6*s);X.stroke()}})};
+
+/* ── خزانةُ المصاحف: صندوقٌ برفوفٍ وكتبٍ تمتلئ يومًا بعد يوم ── */
+DRAW.library=(x,y,n)=>{if(!n)return;const k=Math.min(n,DCAP)/DCAP;
+ const [wx,wy]=HERE,sx=15+k*9,sy=11+k*5,h=26+k*20;
+ isoBox(wx,wy,sx,sy,h,'#8B5E34','#7A5029','#5E3C1E');
+ const base=IY(wx+sx,wy+sy),cx=IX(wx+sx,wy-sy);
+ const shelves=2+Math.round(k*2);
+ for(let r=0;r<shelves;r++){const sy2=base-8-r*(h-10)/shelves;
+  X.strokeStyle=sat('#4A2E14');X.lineWidth=1.6;
+  X.beginPath();X.moveTo(cx-14,sy2);X.lineTo(cx+14,sy2);X.stroke();
+  const books=3+Math.round(k*4);
+  for(let i=0;i<books;i++){const bw=24/books,bh=7+((i*5)%4);
+   X.fillStyle=sat(['#2F7D74','#B99442','#C2544D','#5D5FA8','#38A3D1'][(i+r)%5]);
+   X.beginPath();X.rect(cx-12+i*bw,sy2-bh,bw*.72,bh);X.fill();edge(.9)}}};
+
+/* ── سروٌ باسق: أعمدةٌ خضراء داكنة تتعدّد وتطول ── */
+DRAW.cypress=(x,y,n)=>{const k=Math.min(Math.ceil(n*6/DCAP),6);
+ plot('cypress',k,3,34,26).forEach(({wx,wy})=>{
+  const a=IX(wx,wy),b=IY(wx,wy),s=.66+Math.min(n,DCAP)/DCAP*.46;
+  shadow(a,b,7*s,3*s);
+  trunk(a,b,2.6*s,9*s,'#8A6A42','#5A4227');
+  const H=44*s,W=9*s;
+  const g=X.createLinearGradient(a-W,b-H,a+W*.7,b);
+  g.addColorStop(0,sat('#4FA86E'));g.addColorStop(1,sat('#1F5B39'));
+  X.fillStyle=g;X.beginPath();
+  X.moveTo(a,b-H-8*s);
+  X.quadraticCurveTo(a+W,b-H*.45,a+W*.62,b-8*s);
+  X.quadraticCurveTo(a,b-4*s,a-W*.62,b-8*s);
+  X.quadraticCurveTo(a-W,b-H*.45,a,b-H-8*s);
+  X.closePath();X.fill();edge(1.3);
+  X.strokeStyle='rgba(255,255,255,.16)';X.lineWidth=1.1;
+  X.beginPath();X.moveTo(a-W*.2,b-H*.85);X.lineTo(a-W*.3,b-H*.25);X.stroke()})};
+
+
 /* أداة تحقّق: بصمة بناءٍ على الشاشة عند يوم معيّن.
    بها يُقاس تباعد المجموعات وخلوصها من السور — §١٢. */
 /* يرسم بناءً في سياقٍ خارجيّ — للقياس والاختبار وحدهما */
@@ -1453,7 +1530,9 @@ const FLAT = { path:1, pattern:1, fence:1, rug:1, stream:1, bridge:1 };
 /* أبنيةٌ لا تُرسم بصناديق إيزومترية فلا بصمةَ تُجمع لها من `claim`.
    ونصفُ قطرها في فضاء الأرض يُشتقّ من ظلّها: ظلٌّ نصف عرضه w على
    الشاشة يقابل (سخ+سص)×IK، فالمتماثلُ نصفُ قطره ≈ w ÷ (٢×IK).      */
-const FOOT = { minaret:9, sundial:12, spring:22, well:16, crescent:12, shieldL:20 };
+/* والخليّةُ والسروُ يُرصفان بـ `plot` فبصمتُهما منه، والخزانةُ بـ `isoBox` */
+const FOOT = { minaret:9, sundial:12, spring:22, well:16, crescent:12, shieldL:20,
+               sunrise:16 };
 
 /* موضع اللاعب وبصماتُ ما يصدّه — منفذُ اختبارٍ يقرأ منه الفحص الآليّ
    أن اللاعب لم يدخل بناءً قطّ. لا تقرأ منه الواجهة شيئًا. */
